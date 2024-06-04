@@ -164,7 +164,7 @@ def log_info(file_path):
             print(f"Error removing directory {temp_path}: {e}")
 
 
-    return generate_output((info, platform_version, platform_build_number, error_dict))
+    return generate_output(info, platform_version, platform_build_number, error_dict)
 
 # Main Function to Run the Analysis
 def main(file_path):
