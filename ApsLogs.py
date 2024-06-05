@@ -139,15 +139,13 @@ def generate_output(info, platform_version, platform_build_number, error_dict):
 
 # Main Function to Run the Analysis
 def log_info(file_path):
-    temp_path = "C:\\test\\check_log_files_temp"
-    directory_unzipped = myUtils.extract_zip(file_path, temp_path)
     summary = []
     log_entries = []
     error_dict = {}
 
-    for file in os.listdir(directory_unzipped):
+    for file in os.listdir(file_path):
         if file.endswith(".html"):
-            soup = load_log_file(os.path.join(directory_unzipped, file))
+            soup = load_log_file(os.path.join(file_path, file))
             info = extract_basic_info(soup) # info can be just from the last file. That's fine
             log_entries += extract_log_entries(soup)
             platform_version, platform_build_number = extract_platform_version(log_entries, soup) # extract_platform_version() should honestly just be a part of get_basic_info
@@ -156,13 +154,6 @@ def log_info(file_path):
 
     
     print("\n\n".join(summary))
-    
-    if os.path.exists(temp_path):
-        try:
-            myUtils.remove_directory(temp_path)
-        except Exception as e:
-            print(f"Error removing directory {temp_path}: {e}")
-
 
     return generate_output(info, platform_version, platform_build_number, error_dict)
 

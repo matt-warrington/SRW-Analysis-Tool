@@ -3,6 +3,7 @@ from tkinter import messagebox, filedialog
 import os
 
 # Import functions from other files
+import myUtils
 from ApsLogs import log_info
 from ErrorCodes import error_code_lookup
 from Licenses import check_licenses
@@ -13,11 +14,19 @@ class FunctionCallerApp:
         self.root.title("Function Caller")
 
         self.zip_file_path = None
+        self.unzipped_file_path = None
         self.gg_version = None
 
         # Create UI elements
         self.create_widgets()
         self.update_button_state()
+
+        # Bind the '<Destroy>' event to the cleanup method
+        self.root.bind("<Destroy>", self.cleanup)
+
+    def cleanup(self, event):
+        # Delete the temporary directory if it exists
+        myUtils.remove_directory(self.unzipped_file_path)
 
     def create_widgets(self):
         self.upload_label = tk.Label(self.root, text="Upload a .zip file:")
@@ -69,6 +78,10 @@ class FunctionCallerApp:
         if file_path.endswith(".zip"):
             self.zip_file_path = file_path
             self.file_name_label.config(text=f"Uploaded file: {file_path.split('/')[-1]}")
+            
+            # Create temporary directory of extracted filed from  
+            self.unzipped_file_path = myUtils.extract_zip(self.zip_file_path)
+
             self.update_button_state()
         else:
             messagebox.showerror("Error", "Please select a valid .zip file.")
@@ -78,6 +91,14 @@ class FunctionCallerApp:
         self.gg_version = None
         self.file_entry.delete(0, tk.END)
         self.file_name_label.config(text="")
+
+        # Delete the temporary directory
+        if self.unzipped_file_path and os.path.exists(self.unzipped_file_path):
+            try:
+                myUtils.remove_directory(self.unzipped_file_path)
+            except Exception as e:
+                print(f"Error removing directory {self.unzipped_file_path}: {e}")
+
         self.update_button_state()
 
     def update_button_state(self):
@@ -88,14 +109,12 @@ class FunctionCallerApp:
         self.remove_button.config(state=state if self.zip_file_path else tk.DISABLED)
 
     def call_log_info(self):
-        log_info_result = log_info(self.zip_file_path)
+        log_info_result = log_info(self.unzipped_file_path)
         self.gg_version = log_info_result.get("gg_version")
         messagebox.showinfo("ApsLogs Output", f"gg_version: {self.gg_version}\nos_version: {log_info_result['os_version']}\nbuild_number: {log_info_result['build_number']}\npotential_issues: {log_info_result['potential_issues']}")
         self.update_button_state()
 
-    def call_error_code_lookup(self):
-        #error_code_file_path = filedialog.askopenfilename(filetypes=[("Zip files", "*.zip")], title="Select the error codes .zip file")
-        
+    def call_error_code_lookup(self):        
         default_error_code_file_path = "C:\\Users\\Matt\\Documents\\Tools\\Code Kits\\6.3.1.33505\\errorCodeKit.zip"
         error_code_file_path = "C:\\Users\\Matt\\Documents\\Tools\\Code Kits\\"
         for folder in os.listdir(error_code_file_path):
@@ -115,7 +134,7 @@ class FunctionCallerApp:
             messagebox.showerror("Error", "Please select a valid .zip file.")
 
     def call_check_licenses(self):
-        result = check_licenses(self.zip_file_path)
+        result = check_licenses(self.unzipped_file_path)
         messagebox.showinfo("Licenses Output", result)
 
 # Main program

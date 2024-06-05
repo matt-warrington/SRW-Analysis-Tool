@@ -1,4 +1,3 @@
-import zipfile
 import myUtils
 from bs4 import BeautifulSoup
 import tkinter as tk
@@ -8,27 +7,24 @@ import requests
 
 
 # Access point for Main.py
-def check_licenses(zip_file_path):
-    # Open the zip file
-    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-        # Get a list of all files in the zip archive
-        file_list = zip_ref.namelist()
-        
-        # Check if any files end with .lic
-        lic_files = [file for file in file_list if file.endswith('.lic')]
-        if lic_files:
-            return validate_on_prem_licenses(zip_file_path)
-        
-        # If no .lic files found, search for .html files
-        html_files = [file for file in file_list if file.endswith('.html')]
-        if html_files:
-            return validate_cloud_license(zip_file_path)
-        
-        # If no .lic or .html files found
-        print("No .lic or .html files found in the zip archive.")
+def check_licenses(file_path):
+    # Get a list of all files in the zip archive
+    file_list = os.listdir(file_path)
+    
+    # Check if any files end with .lic
+    lic_files = [file for file in file_list if file.endswith('.lic')]
+    if lic_files:
+        return validate_on_prem_licenses(file_path)
+    
+    # If no .lic files found, search for .html files
+    html_files = [file for file in file_list if file.endswith('.html')]
+    if html_files:
+        return validate_cloud_license(file_path)
+    
+    # If no .lic or .html files found
+    print("No .lic or .html files found in the zip archive.")
 
 ### On-Prem Section ##################################################
-## Main
 def validate_on_prem_licenses(directory):
     """
     Checks the validity of all licenses in the given directory.
@@ -45,9 +41,7 @@ def validate_on_prem_licenses(directory):
         "req_failed": []
     }
 
-    directory_unzipped = myUtils.extract_zip(directory)
-
-    licenses = process_license_files(directory_unzipped)
+    licenses = process_license_files(directory)
     for license in licenses:
         try:
             if license['response_body'].status_code == 200:
@@ -61,12 +55,6 @@ def validate_on_prem_licenses(directory):
         except Exception as e:
             print(f"Error processing license {license['product_code']}: {e}")
             license_statuses['req_failed'].append([f"PC: {license['product_code']} - SN: {license['serial_number']}", 'processing error'])
-
-    if os.path.exists(directory_unzipped):
-        try:
-            myUtils.remove_directory(directory_unzipped)
-        except Exception as e:
-            print(f"Error removing directory {directory_unzipped}: {e}")
 
     return license_statuses
 
@@ -184,10 +172,15 @@ def check_license_validity(product_code, serial_number):
 
 ### Cloud Section ##################################################
 ## Main
-def validate_cloud_license(zip_file_path):
+def validate_cloud_license(file_path): #file_path is unneccesary if we can find this without getting the first APS log in a series and using it to find license info.
     # Read the HTML content from a file
     with open('license_info.html', 'r') as file:
         html_content = file.read()
+
+    # To get HTML content, we need to know the license product code or master ID
+    # To get this info, we probably need either 
+    #       an API call to the cloud license server that uses some info about the host rather than the license itself, or 
+    #       the license info from the first APS log in the series. # BLOCKED by GO-630 GRAPHON: Ensure Support Request Wizard gets first APS log in series
 
     # Parse the HTML content using BeautifulSoup
     soup = BeautifulSoup(html_content, 'lxml')
@@ -237,9 +230,15 @@ def main():
         if not directory_path:
             print("No file selected.")
             exit(1)
+
+        unzipped_path = myUtils.extract_zip(directory_path)
         
-        license_data = check_licenses(directory_path)
+        license_data = check_licenses(unzipped_path)
         myUtils.print_nested_dict(license_data)
+
+        # Delete the temporary directory if it exists
+        myUtils.remove_directory(unzipped_path)
+
     except Exception as e:
         print(f"Error during execution: {e}")
 
