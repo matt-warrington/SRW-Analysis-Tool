@@ -86,13 +86,13 @@ def extract_zip(path: str, toPath = "C:\\temp_zip_reader"):
 
 # This one may be dangerous... it could be used on something it shouldn't... 
 # can I limit this somehow to make sure it only works if the directory has been created during the execution of a project, or even just in the last X minutes?
-def remove_directory(path):
+def remove_directory(dir_path):
     """Recursively delete a directory and all its contents."""
     try:
-        if os.path.exists(path):
+        if dir_path and os.path.exists(dir_path):
             # Iterate over all the entries in the directory
-            for entry in os.listdir(path):
-                entry_path = os.path.join(path, entry)
+            for entry in os.listdir(dir_path):
+                entry_path = os.path.join(dir_path, entry)
                 # Check if it is a directory and recurse
                 if os.path.isdir(entry_path):
                     remove_directory(entry_path)
@@ -100,9 +100,9 @@ def remove_directory(path):
                     # Remove the file
                     os.remove(entry_path)
             # Remove the now-empty directory
-            os.rmdir(path)
+            os.rmdir(dir_path)
     except:
-        raise RuntimeError(f"Failed to remove directory {path}")
+        raise RuntimeError(f"Failed to remove directory {dir_path}")
 
 def copy_file_contents(path, newPath):
     with open(path, 'r') as lic_file:
