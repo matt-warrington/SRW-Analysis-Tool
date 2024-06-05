@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 from tkinter import messagebox, filedialog
 import os
 
@@ -51,21 +52,54 @@ class FunctionCallerApp:
         self.remove_button = tk.Button(self.root, text="Remove", command=self.remove_file, state=tk.DISABLED)
         self.remove_button.grid(row=3, column=0, columnspan=3, pady=5, padx=10)
 
-        # Create a frame to hold the function buttons
-        self.button_frame = tk.Frame(self.root)
-        self.button_frame.grid(row=4, column=0, columnspan=3, pady=10, padx=10)
-
         # Create buttons with the same width
         button_width = 20
 
-        self.btn_log_info = tk.Button(self.button_frame, text="Call log_info", command=self.call_log_info, state=tk.DISABLED, width=button_width)
+        # Create a License info frame:
+        self.lic_frame = tk.Frame(self.root)
+        self.lic_frame.grid(row=4, column=0, columnspan=5, pady=10, padx=10)
+
+        # License - Button
+        self.btn_check_licenses = tk.Button(self.lic_frame, text="Get License Info", command=self.call_check_licenses, state=tk.DISABLED, width=button_width)
+        self.btn_check_licenses.pack(pady=5)
+
+        # License - Tree
+        self.license_info_tree = ttk.Treeview(self.lic_frame)
+        self.license_info_tree.pack(expand=True, fill=tk.BOTH)
+        scrollbar = ttk.Scrollbar(self.lic_frame, orient="vertical", command=self.license_info_tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.license_info_tree.configure(yscrollcommand=scrollbar.set)
+
+        # Create a Log info frame:
+        self.log_frame = tk.Frame(self.root)
+        self.log_frame.grid(row=4, column=5, columnspan=5, pady=10, padx=10)
+
+        self.btn_log_info = tk.Button(self.log_frame, text="Call log_info", command=self.call_log_info, state=tk.DISABLED, width=button_width)
         self.btn_log_info.pack(pady=5)
 
-        self.btn_error_code_lookup = tk.Button(self.button_frame, text="Call error_code_lookup", command=self.call_error_code_lookup, state=tk.DISABLED, width=button_width)
+        # Log - Tree
+        self.log_info_tree = ttk.Treeview(self.log_frame)
+        self.log_info_tree.pack(expand=True, fill=tk.BOTH)
+        scrollbar = ttk.Scrollbar(self.log_frame, orient="vertical", command=self.log_info_tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_info_tree.configure(yscrollcommand=scrollbar.set)
+
+        # Create an Error Codes info frame:
+        self.errorCodes_frame = tk.Frame(self.root)
+        self.errorCodes_frame.grid(row=4, column=10, columnspan=5, pady=10, padx=10)
+
+        # Error Codes - Button
+        self.btn_error_code_lookup = tk.Button(self.errorCodes_frame, text="Call error_code_lookup", command=self.call_error_code_lookup, state=tk.DISABLED, width=button_width)
         self.btn_error_code_lookup.pack(pady=5)
 
-        self.btn_check_licenses = tk.Button(self.button_frame, text="Call check_licenses", command=self.call_check_licenses, state=tk.DISABLED, width=button_width)
-        self.btn_check_licenses.pack(pady=5)
+        # Error Codes - Tree
+        self.errorCodes_info_tree = ttk.Treeview(self.errorCodes_frame)
+        self.errorCodes_info_tree.pack(expand=True, fill=tk.BOTH)
+        scrollbar = ttk.Scrollbar(self.errorCodes_frame, orient="vertical", command=self.errorCodes_info_tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.errorCodes_info_tree.configure(yscrollcommand=scrollbar.set)
+
+        
 
     def browse_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("Zip files", "*.zip")])
@@ -110,10 +144,25 @@ class FunctionCallerApp:
 
     def call_log_info(self):
         log_info_result = log_info(self.unzipped_file_path)
-        self.gg_version = log_info_result.get("gg_version")
-        messagebox.showinfo("ApsLogs Output", f"gg_version: {self.gg_version}\nos_version: {log_info_result['os_version']}\nbuild_number: {log_info_result['build_number']}\npotential_issues: {log_info_result['potential_issues']}")
-        self.update_button_state()
 
+        # Insert the dictionary keys and values into the Treeview
+        self.insert_tree(self.log_info_tree, "", log_info_result)
+
+    def insert_tree(self, tree, parent, item):
+        if isinstance(item, dict):
+            for key, value in item.items():
+                if isinstance(value, dict):
+                    # Insert the key as a parent item
+                    child_item = tree.insert(parent, "end", text=key)
+                    # Recursively insert the child items
+                    self.insert_tree(tree, child_item, value)
+                else:
+                    # Insert key-value pair as child item
+                    tree.insert(parent, "end", text=key, values=(value,))
+        else:
+            # Insert non-dictionary value as child item
+            tree.insert(parent, "end", text=item)
+    
     def call_error_code_lookup(self):        
         default_error_code_file_path = "C:\\Users\\Matt\\Documents\\Tools\\Code Kits\\6.3.1.33505\\errorCodeKit.zip"
         error_code_file_path = "C:\\Users\\Matt\\Documents\\Tools\\Code Kits\\"
@@ -129,13 +178,16 @@ class FunctionCallerApp:
 
         if error_code_file_path.endswith(".zip"):
             result = error_code_lookup(error_code_file_path)
-            messagebox.showinfo("ErrorCodes Output", result)
+            #messagebox.showinfo("ErrorCodes Output", result)
+            # Insert the dictionary keys and values into the Treeview
+            self.insert_tree(self.errorCodes_info_tree, "", result)
         else:
             messagebox.showerror("Error", "Please select a valid .zip file.")
 
     def call_check_licenses(self):
         result = check_licenses(self.unzipped_file_path)
-        messagebox.showinfo("Licenses Output", result)
+        # Insert the dictionary keys and values into the Treeview
+        self.insert_tree(self.license_info_tree, "", result)
 
 # Main program
 if __name__ == "__main__":
