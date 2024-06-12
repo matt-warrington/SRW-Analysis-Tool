@@ -36,9 +36,9 @@ def validate_on_prem_licenses(directory):
         dict: A dictionary with lists of valid, expired, and request-failed licenses.
     """
     license_statuses = {
-        "valid": [],
-        "expired": [],
-        "req_failed": []
+        "valid": {},
+        "expired": {},
+        "req_failed": {}
     }
 
     licenses = process_license_files(directory)
@@ -47,14 +47,19 @@ def validate_on_prem_licenses(directory):
             if license['response_body'].status_code == 200:
                 response_dict = myUtils.convert_response_to_dict(license['response_body'].text)
                 if response_dict['expired'] == "true":
-                    license_statuses['expired'].append([response_dict['name'], license['num_seats']])
+                    #license_statuses['expired'].append([response_dict['name'], license['num_seats']])
+                    license_statuses['expired'][response_dict['name']] = license['num_seats']
                 else:
-                    license_statuses['valid'].append([response_dict['name'], license['num_seats']])
+                    #license_statuses['valid'].append([response_dict['name'], license['num_seats']])
+                    license_statuses['valid'][response_dict['name']] = license['num_seats']
             else:
-                license_statuses['req_failed'].append([f"PC: {license['product_code']} - SN: {license['serial_number']}", license['response_body'].status_code])
+                #license_statuses['req_failed'].append([f"PC: {license['product_code']} - SN: {license['serial_number']}", license['response_body'].status_code])
+                license_statuses['req_failed'][response_dict['name']] = f"Received status code {license['response_body'].status_code}. "
         except Exception as e:
             print(f"Error processing license {license['product_code']}: {e}")
-            license_statuses['req_failed'].append([f"PC: {license['product_code']} - SN: {license['serial_number']}", 'processing error'])
+            #license_statuses['req_failed'].append([f"PC: {license['product_code']} - SN: {license['serial_number']}", 'processing error'])
+            license_statuses['req_failed'][response_dict['name']] = "Encountered processing error. "
+
 
     return license_statuses
 
