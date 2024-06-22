@@ -1,7 +1,6 @@
 import myUtils
 from bs4 import BeautifulSoup
 import tkinter as tk
-#from tkinter import filedialog
 import os
 import requests
 
@@ -35,10 +34,11 @@ def validate_on_prem_licenses(directory):
     Returns:
         dict: A dictionary with lists of valid, expired, and request-failed licenses.
     """
-    license_statuses = {
-        "valid": {},
-        "expired": {},
-        "req_failed": {}
+    licenses_found = {
+        "Total": {
+            'status': 'Valid',
+            'seats': 0
+        }
     }
 
     licenses = process_license_files(directory)
@@ -46,22 +46,21 @@ def validate_on_prem_licenses(directory):
         try:
             if license['response_body'].status_code == 200:
                 response_dict = myUtils.convert_response_to_dict(license['response_body'].text)
-                if response_dict['expired'] == "true":
-                    #license_statuses['expired'].append([response_dict['name'], license['num_seats']])
-                    license_statuses['expired'][response_dict['name']] = license['num_seats']
-                else:
-                    #license_statuses['valid'].append([response_dict['name'], license['num_seats']])
-                    license_statuses['valid'][response_dict['name']] = license['num_seats']
+                licenses_found[response_dict['name']] = {
+                    'status': 'Valid' if response_dict['expired'] == 'false' else 'Expired',
+                    'seats': int(license['num_seats'])
+                }
+
+                # Update total seats / overall status
+                if response_dict['expired'] == True:
+                    licenses_found['Total']['status'] = 'Expired'
+                licenses_found['Total']['seats'] += int(license['num_seats'])
             else:
-                #license_statuses['req_failed'].append([f"PC: {license['product_code']} - SN: {license['serial_number']}", license['response_body'].status_code])
-                license_statuses['req_failed'][response_dict['name']] = f"Received status code {license['response_body'].status_code}. "
+                raise Exception(LookupError)
         except Exception as e:
             print(f"Error processing license {license['product_code']}: {e}")
-            #license_statuses['req_failed'].append([f"PC: {license['product_code']} - SN: {license['serial_number']}", 'processing error'])
-            license_statuses['req_failed'][response_dict['name']] = "Encountered processing error. "
-
-
-    return license_statuses
+        
+    return licenses_found
 
 ## Helper - validate_on_prem_licenses
 def process_license_files(directory):
@@ -177,55 +176,73 @@ def check_license_validity(product_code, serial_number):
 
 ### Cloud Section ##################################################
 ## Main
-def validate_cloud_license(file_path): #file_path is unneccesary if we can find this without getting the first APS log in a series and using it to find license info.
-    # Read the HTML content from a file
-    with open('license_info.html', 'r') as file:
-        html_content = file.read()
+def validate_cloud_license(directory):
+    '''
+    UNFINISHED - NEED THIS TO RETURN A DICTIONARY OF LICENSES SO WE CAN DISPLAY IT IN THE SAME WAY AS ON-PREM LICENSES
+    '''
+    try:
+        for filename in os.listdir(directory):
+            if filename.endswith(".html"):
+                file_path = os.path.join(directory, filename)
+                # Read the HTML content from a file
+                with open(file_path, 'r') as file:
+                    html_content = file.read()
 
-    # To get HTML content, we need to know the license product code or master ID
-    # To get this info, we probably need either 
-    #       an API call to the cloud license server that uses some info about the host rather than the license itself, or 
-    #       the license info from the first APS log in the series. # BLOCKED by GO-630 GRAPHON: Ensure Support Request Wizard gets first APS log in series
+                # To get HTML content, we need to know the license product code or master ID
+                # To get this info, we probably need either 
+                #       an API call to the cloud license server that uses some info about the host rather than the license itself, or 
+                #       the license info from the first APS log in the series. # BLOCKED by GO-630 GRAPHON: Ensure Support Request Wizard gets first APS log in series
 
-    # Parse the HTML content using BeautifulSoup
-    soup = BeautifulSoup(html_content, 'lxml')
+                # Parse the HTML content using BeautifulSoup
+                soup = BeautifulSoup(html_content, 'lxml')
 
-    # Find the relevant line containing the license information
-    license_info = soup.find(text=lambda text: text and "GO-Global license information" in text)
-    if license_info:
-        # Get the parent <td> tag, which contains all the relevant info
-        parent_td = license_info.find_parent('td')
-        if parent_td:
-            # Extract the required details using BeautifulSoup
-            license_details = str(parent_td)
+                # Find the relevant line containing the license information
+                license_info = soup.find(text=lambda text: text and "GO-Global license information" in text)
+                if license_info:
+                    # Get the parent <td> tag, which contains all the relevant info
+                    parent_td = license_info.find_parent('td')
+                    if parent_td:
+                        # Extract the required details using BeautifulSoup
+                        license_details = str(parent_td)
 
-            # Parse the extracted details
-            expiration_date = None
-            seats = None
-            license_master_id = None
-            product_code = None
+                        # Parse the extracted details
+                        expiration_date = None
+                        seats = None
+                        license_master_id = None
+                        product_code = None
 
-            if 'Expiration date:' in license_details:
-                expiration_date = license_details.split('Expiration date:')[1].split('<br>')[0].strip()
+                        if 'Expiration date:' in license_details:
+                            expiration_date = license_details.split('Expiration date:')[1].split('<br>')[0].strip()
 
-            if 'Seats:' in license_details:
-                seats = license_details.split('Seats:')[1].split('<')[0].strip()
+                        if 'Seats:' in license_details:
+                            seats = license_details.split('Seats:')[1].split('<')[0].strip()
 
-            if 'License master:' in license_details:
-                license_master_id = license_details.split('License master:')[1].split('<')[0].strip()
+                        if 'License master:' in license_details:
+                            license_master_id = license_details.split('License master:')[1].split('<')[0].strip()
 
-            if 'Product code:' in license_details:
-                product_code = license_details.split('Product code:')[1].split('<')[0].strip()
+                        if 'Product code:' in license_details:
+                            product_code = license_details.split('Product code:')[1].split('<')[0].strip()
 
-            # Print the extracted details
-            print(f'Expiration Date: {expiration_date}')
-            print(f'Seats: {seats}')
-            print(f'License Master ID: {license_master_id}')
-            print(f'Product Code: {product_code}')
-        else:
-            print('Relevant parent <td> tag not found.')
-    else:
-        print('Relevant license information not found in the HTML.')
+                        # Print the extracted details
+                        print(f'Expiration Date: {expiration_date}')
+                        print(f'Seats: {seats}')
+                        print(f'License Master ID: {license_master_id}')
+                        print(f'Product Code: {product_code}')
+                    else:
+                        print('Relevant parent <td> tag not found.')
+                else:
+                    print('Relevant license information not found in the HTML.')
+    except Exception as e:
+        print(f"Error processing cloud license: {e}")
+        return {'cloud license lookup failed': {'status': 'n/a', 'seats': 0}}
+
+    # If no exception occurs, return the extracted details in a dictionary format
+    return {
+        'Expiration Date': expiration_date,
+        'Seats': seats,
+        'License Master ID': license_master_id,
+        'Product Code': product_code
+    }
 ### Cloud Section ##################################################
 
 def main():
