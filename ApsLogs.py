@@ -1,10 +1,62 @@
-import datetime
+from tkinter import messagebox
+import zipfile
 from bs4 import BeautifulSoup
 import myUtils
 import os
 import GOGlobal
 import requests
 from datetime import datetime as dt
+import json
+
+DEFAULT_KEYWORDS = [
+    "error",
+    "werfault.exe",
+    "failed",
+    "disconnected",
+    "memory usage limit",
+    "(WLE",
+    "(WSE",
+]
+CONFIG_FILE_PATH = "aps_config.json"
+
+# Note: Order should not matter since multiple keywords can be assigned to one message, but if we ever change that, the order will matter.
+def load_keywords_from_config(config_path=CONFIG_FILE_PATH):
+    """
+    Load keywords from a configuration file.
+
+    Args:
+        config_path (str): The path to the configuration file.
+
+    Returns:
+        list: A list of keywords loaded from the configuration file. If an error occurs during loading, an empty list is returned.
+    """
+    try:
+        if not os.path.exists(config_path):
+            config = {'log_keywords': DEFAULT_KEYWORDS}
+            with open(config_path, 'w') as config_file:
+                json.dump(config, config_file, indent=4)  # indent for readability
+            return DEFAULT_KEYWORDS
+        
+        with open(config_path, 'r') as config_file:
+            config = json.load(config_file)
+            log_keywords = config.get("log_keywords", [])
+            
+            # Check if log_keywords is empty or not present
+            if not log_keywords or len(log_keywords) == 0:
+                print(f"Warning: 'log_keywords' is empty or not present in '{config_path}'. Using defaults.")
+                return DEFAULT_KEYWORDS
+            
+            return log_keywords
+    
+    except FileNotFoundError:
+        print(f"Config file not found: {config_path}")
+        return DEFAULT_KEYWORDS
+    except PermissionError:
+        print(f"Permission denied for file: {config_path}")
+        return DEFAULT_KEYWORDS
+    except Exception as e:
+        print(f"Error loading config file '{config_path}': {e}")
+        return DEFAULT_KEYWORDS
 
 # Step 1: Load and Parse the HTML Log File
 def load_log_file(file_path):
@@ -57,7 +109,6 @@ def get_client_versions(log_entries):
                     client_versions.append((client_type, version))
     return client_versions
 
-    
 
 def get_platform_version(log_entries):
     platform_version = None
@@ -104,26 +155,7 @@ def extract_platform_version(log_entries, soup):
     return platform_version, platform_build_number
 
 # Step 4: Extract Log Entries
-def extract_log_entries(soup):
-    log_entries = []
-    log_section = soup.find('a', {'name': 'LogEntries'})
-    log_table = log_section.find_next('table')
-    rows = log_table.find_all('tr')[1:]
-    
-    for row in rows:
-        cells = row.find_all('td')
-        if len(cells) != 0:
-            entry = {
-                '#': cells[0].text.strip(),
-                'date': cells[1].text.strip(),
-                'time': cells[2].text.strip(),
-                'description': cells[3].text.strip()
-            }
-            log_entries.append(entry)
-    
-    return log_entries
-
-def extract_log_entries_2(fileName: str, soup):
+def extract_log_entries(fileName: str, soup):
     log_entries = []
     log_section = soup.find('a', {'name': 'LogEntries'})
     log_table = log_section.find_next('table')
@@ -152,27 +184,8 @@ def flag_log_entries(log_entries: list, keywords: list):
     for entry in log_entries:
         for keyword in keywords:
             if keyword in entry['description']:
-                #flagged_entries[keyword].append(entry)
                 entry['keys'].append(keyword)
 
-    #return flagged_entries
-
-
-# Step 5: Identify Errors or Failures
-def analyze_log_entries(log_entries):
-    error_dict = {}
-    error_keywords = ['error', 'failed', 'exception', 'critical']
-    for keyword in error_keywords:
-        if not keyword in error_dict.keys():
-            error_dict[keyword] = {}
-
-    for entry in log_entries:
-        for keyword in error_keywords:
-            if keyword in entry['description'].lower():
-                error_dict[keyword].append(entry)
-                break
-    
-    return error_dict
 
 # Step 6a: Generate Summary
 def generate_summary(info, error_dict):
@@ -201,37 +214,63 @@ def generate_output(info, error_dict):
     }
 
 # Main Function to Run the Analysis
-def log_info(file_path):
-    summary = []
+
+def log_info(file_path, keywords=DEFAULT_KEYWORDS):
     log_entries = []
-    error_dict = {}
+
+    keywords = load_keywords_from_config()
 
     for file in os.listdir(file_path):
         if file.endswith(".html"):
             soup = load_log_file(os.path.join(file_path, file))
-            log_entries += extract_log_entries(soup)
-            info = extract_basic_info(soup, log_entries)
-            error_dict[file] = analyze_log_entries(log_entries)
-            summary.append(generate_summary(info, error_dict[file]))
+            log_entries += extract_log_entries(file, soup)
     
-    print("\n\n".join(summary))
-
-    return generate_output(info, error_dict) #platform_version, platform_build_number, error_dict)
-
-def log_info_2(file_path, keywords):
-    #summary = []
-    log_entries = []
-    flagged_entries = None
-
-    for file in os.listdir(file_path):
-        if file.endswith(".html"):
-            soup = load_log_file(os.path.join(file_path, file))
-            log_entries += extract_log_entries_2(file, soup)
-    
-    #flagged_entries = flag_log_entries(log_entries, keywords)
     flag_log_entries(log_entries, keywords)
     
-    return log_entries#, flagged_entries
+    return log_entries
+
+def extract_error_codes(zip_file_path):
+    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+        # Extract only the ErrorCodes.txt file
+        for file_info in zip_ref.infolist():
+            if file_info.filename.endswith("ErrorCodes.txt"):
+                with zip_ref.open(file_info.filename) as file:
+                    return file.read().decode('utf-8')
+    return None
+
+def parse_error_codes(content):
+    error_dict = {}
+    lines = content.splitlines()
+    for line in lines:
+        if '=' in line:
+            code, description = map(str.strip, line.split('=', 1))
+            try:
+                code = int(code)
+            except ValueError:
+                # Skip if the code cannot be converted to an integer
+                continue
+            error_dict[code] = description
+    return error_dict
+
+def get_error_code_range(error_dict):
+    codes = list(error_dict.keys())
+    if codes:
+        return min(codes), max(codes)
+    return None, None
+
+def error_code_lookup(zip_file_path):
+    content = extract_error_codes(zip_file_path)
+    if not content:
+        messagebox.showerror("Error", "ErrorCodes.txt not found in the selected zip file.")
+        return
+    
+    return parse_error_codes(content)
+
+def get_error_code(code: str, codes: dict):
+    if code in codes.keys():
+        return codes[code]
+    else:
+        return f"Error code {code} not found."
 
 def check_licenses(file_path):
     # Get a list of all files in the zip archive
@@ -264,7 +303,8 @@ def validate_on_prem_licenses(directory):
     licenses_found = {
         "Total": {
             'status': 'Valid',
-            'seats': 0
+            'seats': 0,
+            'file': '-'
         }
     }
 
@@ -275,7 +315,8 @@ def validate_on_prem_licenses(directory):
                 response_dict = myUtils.convert_response_to_dict(license['response_body'].text)
                 licenses_found[response_dict['name']] = {
                     'status': 'Valid' if response_dict['expired'] == 'false' else 'Expired',
-                    'seats': int(license['num_seats'])
+                    'seats': int(license['num_seats']),
+                    'file': license['file']
                 }
 
                 # Update total seats / overall status
@@ -316,6 +357,7 @@ def process_license_files(directory):
                         'product_code': product_code,
                         'serial_number': serial_number,
                         'num_seats': num_seats,
+                        'file': file_path,
                         'response_body': response_body
                     })
                 elif serial_number:
@@ -410,7 +452,8 @@ def validate_cloud_license(directory):
     licenses_found = {
         "Total": {
             'status': '-',
-            'seats': 0
+            'seats': 0,
+            'file': '-'
         }
     }
 
@@ -447,19 +490,21 @@ def validate_cloud_license(directory):
 
                         licenses_found[license_master_id] = {
                             'status': 'Valid' if expiration_date > dt.today() else 'Expired',
-                            'seats': seats
+                            'seats': seats,
+                            'file': '-'
                         }
                         licenses_found['Total'] = {
                             'status': 'Valid' if expiration_date > dt.today() else 'Expired',
-                            'seats': seats
+                            'seats': seats,
+                            'file': '-'
                         }
-                else:
-                    print('Relevant license information not found in the HTML.')
+                        break
     except Exception as e:
         #print(f"Error processing cloud license: {e}")
         licenses_found['Total'] = {
             'status': e,
-            'seats': 0
+            'seats': 0,
+            'file': '-'
         }
     finally:
         return licenses_found
@@ -469,29 +514,18 @@ def validate_cloud_license(directory):
 
 # Main Function to Run the Analysis
 def main(file_path):
-    temp_path = "C:\\test\\check_log_files_temp"
-    directory_unzipped = myUtils.extract_zip(file_path, temp_path)
-    summary = []
-    log_entries = []
-    error_dict = {}
-
-    for file in os.listdir(directory_unzipped):
-        if file.endswith(".html"):
-            soup = load_log_file(os.path.join(directory_unzipped, file))
-            log_entries += extract_log_entries(soup)
-            info = extract_basic_info(soup, log_entries)
-            error_dict[file] = analyze_log_entries(log_entries)
-            summary.append(generate_summary(info, error_dict[file]))
-    
-    print("\n\n".join(summary))
-    
-    if os.path.exists(temp_path):
-        try:
-            myUtils.remove_directory(temp_path)
-        except Exception as e:
-            print(f"Error removing directory {temp_path}: {e}")
+    log_info(file_path)
 
 # Example Usage
 if __name__ == "__main__":
-    log_file_path = myUtils.select_file("SRW", ".zip")
-    main(log_file_path)
+    zip_file_path = myUtils.select_file("SRW", ".zip")
+
+    temp_path = os.path.join(os.path.dirname(zip_file_path), "temp")
+    myUtils.extract_zip(zip_file_path, temp_path)
+    log_entries = log_info(temp_path)
+
+    for entry in log_entries:
+        if len(entry['keys']) > 0:
+            print(entry['description'])
+
+    myUtils.remove_directory(temp_path)

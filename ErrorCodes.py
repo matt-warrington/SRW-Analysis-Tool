@@ -31,6 +31,14 @@ def get_error_code_range(error_dict):
         return min(codes), max(codes)
     return None, None
 
+def error_code_lookup_2(zip_file_path):
+    content = extract_error_codes(zip_file_path)
+    if not content:
+        messagebox.showerror("Error", "ErrorCodes.txt not found in the selected zip file.")
+        return None
+    
+    return parse_error_codes(content)
+
 def error_code_lookup(zip_file_path):
     content = extract_error_codes(zip_file_path)
     if not content:

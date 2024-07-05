@@ -1,12 +1,14 @@
+import subprocess
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox, filedialog
 import os
 from datetime import datetime as dt
+import webbrowser
 
 # Import functions from other files
 import myUtils
-from ApsLogs import log_info, log_info_2
+from ApsLogs import log_info
 from ErrorCodes import error_code_lookup
 from ApsLogs import check_licenses
 from BasicInfo import get_basic_info
@@ -15,17 +17,13 @@ class FunctionCallerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("SRW Analysis Tool")
-        self.root.geometry("1200x800")
+        self.root.geometry("1400x800")
 
         # Variables
         self.zip_file_path = None
         self.unzipped_file_path = None
         self.gg_version = None
         self.log_data = []
-        self.log_keywords = [ # Update this default set of keywords and phrases...
-            "error", 
-            "failed", 
-            "WERfault.exe"] 
 
         # Create UI elements
         self.create_widgets()
@@ -41,33 +39,37 @@ class FunctionCallerApp:
     def create_widgets(self):
         # File upload section
         self.file_frame = ttk.Frame(root)
-        self.file_frame.pack(padx=10, pady=10, fill="x")
+        self.file_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
         self.file_label = ttk.Label(self.file_frame, text="Upload File:")
-        self.file_label.pack(side="left")
+        self.file_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
 
         self.file_entry = ttk.Entry(self.file_frame)
-        self.file_entry.pack(side="left", padx=5, fill="x", expand=True)
+        self.file_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
 
         self.browse_button = ttk.Button(self.file_frame, text="Browse...", command=self.browse_file)
-        self.browse_button.pack(side="left", padx=5)
+        self.browse_button.grid(row=0, column=2, padx=5, pady=2)
 
         self.upload_button = ttk.Button(self.file_frame, text="Upload", command=self.upload_file)
-        self.upload_button.pack(side="left", padx=5)
+        self.upload_button.grid(row=0, column=3, padx=5, pady=2)
+
+        self.file_frame.columnconfigure(1, weight=1)
 
         # Current File Section
         self.current_file_frame = ttk.Frame(root)
-        self.current_file_frame.pack(padx=10, pady=10, fill="x")
+        self.current_file_frame.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
 
         self.current_file_label = ttk.Label(self.current_file_frame, text="Current SRW:")
-        self.current_file_label.pack(side="left")
+        self.current_file_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
 
         self.clear_button = ttk.Button(self.current_file_frame, text="Clear", command=self.clear_file)
-        self.clear_button.pack(side="right", padx=5)
+        self.clear_button.grid(row=0, column=1, padx=5, pady=2, sticky="e")
+
+        self.current_file_frame.columnconfigure(0, weight=1)
 
         # Create a frame for the system info and licenses section
         self.info_licenses_frame = ttk.Frame(root)
-        self.info_licenses_frame.pack(padx=10, pady=10, fill="both", expand=True)
+        self.info_licenses_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
 
         # System info section
         self.info_frame = ttk.Frame(self.info_licenses_frame)
@@ -76,84 +78,123 @@ class FunctionCallerApp:
         self.host_os_label = ttk.Label(self.info_frame, text="Host Operating System:")
         self.host_os_label.grid(row=0, column=0, padx=5, pady=2, sticky="e")
         self.host_os_entry = ttk.Entry(self.info_frame, width=30, state='readonly')
-        self.host_os_entry.grid(row=0, column=1, padx=5, pady=2)
+        self.host_os_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
 
         self.host_version_label = ttk.Label(self.info_frame, text="GO-Global Host Version:")
         self.host_version_label.grid(row=1, column=0, padx=5, pady=2, sticky="e")
         self.host_version_entry = ttk.Entry(self.info_frame, width=30, state='readonly')
-        self.host_version_entry.grid(row=1, column=1, padx=5, pady=2)
+        self.host_version_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
 
         self.client_label = ttk.Label(self.info_frame, text="Client Versions and OS:")
         self.client_label.grid(row=2, column=0, padx=5, pady=2, sticky="e")
         self.client_tree = ttk.Treeview(self.info_frame, columns=("version", "os"), show='headings', height=5)
         self.client_tree.heading("version", text="Client Version")
         self.client_tree.heading("os", text="Client OS")
-        self.client_tree.grid(row=2, column=1, padx=5, pady=2)
+        self.client_tree.grid(row=2, column=1, padx=5, pady=2, sticky="nsew")
         self.client_scrollbar = ttk.Scrollbar(self.info_frame, orient="vertical", command=self.client_tree.yview)
         self.client_scrollbar.grid(row=2, column=2, sticky='ns')
         self.client_tree.configure(yscrollcommand=self.client_scrollbar.set)
 
-        # Licenses section as Treeview
+        self.info_frame.columnconfigure(1, weight=1)
+
         # Licenses section as Treeview
         self.licenses_frame = ttk.Frame(self.info_licenses_frame)
         self.licenses_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         self.licenses_label = ttk.Label(self.licenses_frame, text="Licenses:")
-        self.licenses_label.pack(side="top", anchor="w")
-        
-        # Update Treeview to have 3 columns: ID, Status, # Seats
-        self.licenses_tree = ttk.Treeview(self.licenses_frame, columns=("ID", "Status", "# Seats"), show='headings')
-        self.licenses_tree.pack(side="left", fill="both", expand=True)
+        self.licenses_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+
+        self.licenses_tree = ttk.Treeview(self.licenses_frame, columns=("ID", "Status", "# Seats", "File"), show='headings')
+        self.licenses_tree.grid(row=1, column=0, padx=5, pady=2, sticky="nsew")
         self.licenses_scrollbar = ttk.Scrollbar(self.licenses_frame, orient="vertical", command=self.licenses_tree.yview)
-        self.licenses_scrollbar.pack(side="right", fill="y")
+        self.licenses_scrollbar.grid(row=1, column=1, sticky='ns')
         self.licenses_tree.configure(yscrollcommand=self.licenses_scrollbar.set)
-        
-        # Define headings
+
+        self.licenses_frame.columnconfigure(0, weight=1)
+        self.licenses_frame.rowconfigure(1, weight=1)
+
         self.licenses_tree.heading("ID", text="ID")
         self.licenses_tree.heading("Status", text="Status")
         self.licenses_tree.heading("# Seats", text="# Seats")
+        self.licenses_tree.heading("File", text="File")
 
-        # Define column widths
         self.licenses_tree.column("ID", width=100)
         self.licenses_tree.column("Status", width=100)
         self.licenses_tree.column("# Seats", width=100)
+        self.licenses_tree.column("File", width=300)
+        self.licenses_tree.bind("<Double-1>", self.open_license_file)
 
         # Log messages section
         self.logs_frame = ttk.LabelFrame(root, text="Log Messages")
-        self.logs_frame.pack(padx=10, pady=10, fill="both", expand=True)
+        self.logs_frame.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
         self.search_frame = ttk.Frame(self.logs_frame)
-        self.search_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.search_frame.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
         self.search_vars = {}
         columns = ["file", "#", "date", "time", "keys", "description"]
         for col in columns:
             self.lbl = ttk.Label(self.search_frame, text=col)
-            self.lbl.pack(side=tk.LEFT, padx=5)
+            self.lbl.grid(row=0, column=columns.index(col), padx=5, pady=2, sticky="w")
             self.search_vars[col] = tk.StringVar()
             self.ent = ttk.Entry(self.search_frame, textvariable=self.search_vars[col])
-            self.ent.pack(side=tk.LEFT, padx=5)
+            self.ent.grid(row=1, column=columns.index(col), padx=5, pady=2, sticky="ew")
 
-        # Later change this self.search to be triggered upon update of any search bar...
         self.search_button = ttk.Button(self.search_frame, text="Search", command=self.search)
-        self.search_button.pack(side=tk.LEFT, padx=5)
+        self.search_button.grid(row=1, column=len(columns), padx=5, pady=2)
 
-        # Create a Treeview widget within this frame
+        self.search_frame.columnconfigure(1, weight=1)
+
         self.log_info_tree = ttk.Treeview(self.logs_frame, columns=columns, show='headings')
-        self.log_info_tree.pack(expand=True, fill=tk.BOTH)
+        self.log_info_tree.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
         self.log_scrollbar_x = ttk.Scrollbar(self.log_info_tree, orient=tk.HORIZONTAL, command=self.log_info_tree.xview)
         self.log_scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
         self.log_info_tree.configure(xscrollcommand=self.log_scrollbar_x.set)
+        self.log_info_tree.bind("<Double-1>", self.open_log_in_browser)
 
-        # Define headings
         for col in columns:
             self.log_info_tree.heading(col, text=col, command=lambda _col=col: self.sort_column(_col, False))
 
-        # Define column widths
         self.log_info_tree.column("file", width=100)
         self.log_info_tree.column("#", width=20)
         self.log_info_tree.column("date", width=50)
         self.log_info_tree.column("time", width=50)
         self.log_info_tree.column("keys", width=50)
         self.log_info_tree.column("description", width=500)
+
+        self.logs_frame.columnconfigure(0, weight=1)
+        self.logs_frame.rowconfigure(1, weight=1)
+
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(3, weight=1)
+
+    def open_log_in_browser(self, event):
+        # Get the selected item
+        selected_item = self.log_info_tree.selection()[0]
+        values = self.log_info_tree.item(selected_item, "values")
+        
+        # Extract the file name and log number
+        file_name = values[0]
+        log_number = values[1]
+        
+        # Construct the file path
+        file_path = os.path.join(self.unzipped_file_path, file_name)
+        
+        # Open the file in the default web browser
+        webbrowser.open(f"file://{file_path}")
+
+    def open_license_file(self, event):
+        # Get the selected item
+        selected_item = self.licenses_tree.selection()[0]
+        values = self.licenses_tree.item(selected_item, "values")
+        
+        # Extract the license ID
+        license_file = values[3]
+        
+        # Check if the file exists and open it in Notepad, if there is a file value.
+        if license_file != "-":
+            if os.path.exists(license_file):
+                subprocess.Popen([r'C:\Windows\notepad.exe', license_file])
+            else:
+                messagebox.showerror("Error", f"License file {license_file} not found.")
 
     def clear_file(self):
         self.zip_file_path = None
@@ -256,7 +297,7 @@ class FunctionCallerApp:
 
             # Get all the info you need
             self.call_basic_info()
-            self.call_log_info_2()
+            self.call_log_info()
             self.call_check_licenses()
         else:
             messagebox.showerror("Error", "Please select a valid .zip file.")
@@ -300,20 +341,11 @@ class FunctionCallerApp:
         # Disable writing to the entries
         self.host_version_entry.config(state='readonly')
         self.host_os_entry.config(state='readonly')
-   
+
     def call_log_info(self):
         log_info_result = log_info(self.unzipped_file_path)
-
-        # Insert the dictionary keys and values into the Treeview
-        self.insert_tree(self.log_info_tree, "", log_info_result)
-        #self.update_button_state()
-
-    def call_log_info_2(self):
-        log_info_result = log_info_2(self.unzipped_file_path, self.log_keywords)
         self.log_data = log_info_result
         self.update_log_treeview(log_info_result)
-        #self.insert_tree(self.log_info_tree, "", log_info_result)#[0])
-        #self.insert_tree(self.flagged_log_tree, "", log_info_result[1])
 
     def insert_tree(self, tree, parent, item):
         if isinstance(item, dict):
@@ -357,7 +389,7 @@ class FunctionCallerApp:
         
         # Insert new data into licenses_tree
         for license_id in result.keys():
-            self.licenses_tree.insert('', 'end', values=(license_id, result[license_id]['status'], result[license_id]['seats']))
+            self.licenses_tree.insert('', 'end', values=(license_id, result[license_id]['status'], result[license_id]['seats'], result[license_id]['file']))
 
     def update_treeview(self, data):
         # Clear existing data
