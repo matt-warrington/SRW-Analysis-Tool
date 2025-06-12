@@ -1,6 +1,8 @@
 # I think I could replace this with a JSON file one day that could be way more useful for gathering all the relevant info I need. This is just a first attempt at storing some info centrally...
 
 versions = [
+    "6.3.2.34154",
+    "6.3.1.33754",
     "6.3.1.33709",
     "6.2.6.33307",
     "6.2.5.32895",
@@ -31,5 +33,37 @@ versions = [
 supported_platforms = {
     "20348": "Windows Server 2022",
     "17763": "Windows Server 2019",
-    "14393": "Windows Server 2016" 
+    "14393": "Windows Server 2016",
+    "19045": "Windows 10", # Not 100% sure about these... 
+    "22631": "Windows 11", # ...
+    "22621": "Windows 11"  # taken from Wassim's patch Tuesday email.
 }
+
+server_roles = {
+    1: "Independent Host",
+    2: "Dependent Host",
+    3: "Relay Load Balancer",
+    4: "Proxy Server",
+    5: "Application Host",
+    6: "Portal",
+    7: "Farm Host",
+    8: "Farm Manager"
+}
+
+support_issue_types = [
+    "Admin Console",
+    "AppController",
+    "Crash / Hang - Application",
+    "Crash / Hang - GO-Global",
+    "Crash / Hang - Server",
+    "Display",
+    "Licensing",
+    "Mobile Client",
+    "OpenID Connect",
+    "Performance",
+    "Printing",
+    "Published Application",
+    "Session Disconnect",
+    "Web Client",
+    "Other"
+]

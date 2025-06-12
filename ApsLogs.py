@@ -1,3 +1,4 @@
+import logging
 from tkinter import messagebox
 import zipfile
 from bs4 import BeautifulSoup
@@ -7,6 +8,9 @@ import GOGlobal
 import requests
 from datetime import datetime as dt
 import json
+import re
+import chardet
+
 
 DEFAULT_KEYWORDS = [
     "error",
@@ -17,7 +21,32 @@ DEFAULT_KEYWORDS = [
     "(WLE",
     "(WSE",
 ]
-CONFIG_FILE_PATH = "aps_config.json"
+CONFIG_FILE_PATH = "config.json"
+DEFAULT_LOG_FILE = "app.log"
+
+def setup_logger():
+    try:
+        # Load log file path from config.json
+        if os.path.exists(CONFIG_FILE_PATH):
+            with open(CONFIG_FILE_PATH, 'r') as config_file:
+                config = json.load(config_file)
+                log_file = config.get("log_file", DEFAULT_LOG_FILE)
+        else:
+            log_file = DEFAULT_LOG_FILE
+
+        # Configure the logger
+        logging.basicConfig(
+            filename=log_file,
+            level=logging.DEBUG,
+            format="%(asctime)s - %(levelname)s - %(message)s"
+        )
+        return logging.getLogger("SRWAnalyzer")
+    except Exception as e:
+        logger.exception(f"Failed to set up logger: {e}")
+        raise
+
+# Initialize the logger
+logger = setup_logger()
 
 # Note: Order should not matter since multiple keywords can be assigned to one message, but if we ever change that, the order will matter.
 def load_keywords_from_config(config_path=CONFIG_FILE_PATH):
@@ -43,136 +72,191 @@ def load_keywords_from_config(config_path=CONFIG_FILE_PATH):
             
             # Check if log_keywords is empty or not present
             if not log_keywords or len(log_keywords) == 0:
-                print(f"Warning: 'log_keywords' is empty or not present in '{config_path}'. Using defaults.")
+                logger.warning(f"'log_keywords' is empty or not present in '{config_path}'. Using defaults.")
                 return DEFAULT_KEYWORDS
             
             return log_keywords
     
     except FileNotFoundError:
-        print(f"Config file not found: {config_path}")
+        logger.error(f"Config file not found: {config_path}")
         return DEFAULT_KEYWORDS
     except PermissionError:
-        print(f"Permission denied for file: {config_path}")
+        logger.error(f"Permission denied for file: {config_path}")
         return DEFAULT_KEYWORDS
     except Exception as e:
-        print(f"Error loading config file '{config_path}': {e}")
+        logger.exception(f"Error loading config file '{config_path}': {e}")
         return DEFAULT_KEYWORDS
 
-# Step 1: Load and Parse the HTML Log File
 def load_log_file(file_path):
     try:
         with open(file_path, 'r', encoding='utf-16') as file:
             content = file.read()
-        return BeautifulSoup(content, 'html.parser')
-    except:
-        raise RuntimeError("Error loading log file.")
+            return BeautifulSoup(content, 'html.parser')
+    except Exception:
+        logger.warning(f"Initial read of {file_path} failed. Trying to detect encoding.")
+        try:
+            # Detect the encoding
+            with open(file_path, 'rb') as file:
+                raw_data = file.read()
+                detected_encoding = chardet.detect(raw_data)['encoding']
+            
+            logger.info(f"Detected encoding for {file_path}: {detected_encoding}")  # Debug statement
+            
+            # Try opening the file with the detected encoding
+            try:
+                with open(file_path, 'r', encoding=detected_encoding ) as file:
+                    content = file.read()
+            except (UnicodeDecodeError, TypeError):
+                # Fallback to utf-8 if the detected encoding fails
+                logger.warning(f"Failed to decode with detected encoding ({detected_encoding}). Falling back to utf-8.")
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
+                    content = file.read()
 
-# Step 2: Extract Basic Information
-def extract_basic_info(soup, log_entries):
-    info = {
-        "hostOS": None,
-        "hostVersion": None,
-        "clientVersions": []
-    }
-    
-    # Extract Product Version
-    info['hostOS'] = get_platform_version(soup)
-    info['hostVersion'] = get_host_version(soup)
-    info['clientVersions'].append(get_client_versions(log_entries))
-    
-    return info
+            return BeautifulSoup(content, 'html.parser')
+        except FileNotFoundError:
+            logger.exception(f"File not found: {file_path}")
+            raise RuntimeError(f"File not found: {file_path}")
+        except PermissionError:
+            logger.exception(f"Permission denied: {file_path}")
+            raise RuntimeError(f"Permission denied: {file_path}")
+        except Exception as e:
+            logger.exception(f"Error loading log file: {e}")
+            raise RuntimeError(f"Error loading log file: {e}")
+
+def load_log_file_text(file_path, log_entries):
+    try:
+        # Detect the encoding
+        with open(file_path, 'rb') as file:
+            raw_data = file.read()
+            detected_encoding = chardet.detect(raw_data)['encoding']
+        
+        logger.info(f"Detected encoding for {file_path}: {detected_encoding}")  # Debug statement
+        
+        # Try opening the file with the detected encoding
+        try:
+            with open(file_path, 'r', encoding=detected_encoding) as file:
+                log_entries.extend(file.readlines())
+        except (UnicodeDecodeError, TypeError):
+            # Fallback to utf-8 if the detected encoding fails
+            logger.warning(f"Failed to decode with detected encoding ({detected_encoding}). Falling back to utf-8.")
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
+                log_entries.extend(file.readlines())
+        return log_entries
+    except FileNotFoundError:
+        logger.exception(f"File not found: {file_path}")
+        raise RuntimeError(f"File not found: {file_path}")
+    except PermissionError:
+        logger.exception(f"Permission denied: {file_path}")
+        raise RuntimeError(f"Permission denied: {file_path}")
+    except Exception as e:
+        logger.exception(f"Error loading log file: {e}")
+        raise RuntimeError(f"Error loading log file: {e}")
 
 def get_host_version(soup):
-    # Extract Product Version
-    product_info_table = soup.find_all('table')[1]
-    rows = product_info_table.find_all('tr')
-    
-    for row in rows:
-        cells = row.find_all('td')
-        if 'Product Version' in cells[0].text:
-            return cells[1].text.strip()
-    
-    return None
-
-def get_client_versions(log_entries):
-    client_versions = []
-
-    for entry in log_entries:
-        descr = entry['description']
-        if "The version of the" in descr:
-            parts = descr.split('The version of the ')
-            for part in parts[1:]:
-                if ' client is ' in part:
-                    client_info = part.split(' client is ')
-                    client_type = client_info[0].strip()
-                    version = client_info[1].strip()
-                    client_versions.append((client_type, version))
-    return client_versions
-
-
-def get_platform_version(log_entries):
-    platform_version = None
-    platform_build_number = None
-    
-    for entry in log_entries:
-        if "The current operating system is" in entry['description']:
-            return entry['description'].split("is")[1].strip()
-    
-    return "Not found"
-
-def get_platform_version(soup):
-    operating_env_section = soup.find('a', {'name': 'EnvOp'})
-    if operating_env_section:
-        env_table = operating_env_section.find_next('table')
-        env_rows = env_table.find_all('tr')
+    try:
+        product_info_table = soup.find_all('table')[1]
+        rows = product_info_table.find_all('tr')
         
-        for row in env_rows:
+        for row in rows:
             cells = row.find_all('td')
-            if len(cells) > 0 and 'Platform Build Number' in cells[0].text:
-                build_num = cells[1].text.split(".")[0].strip()
-                return GOGlobal.supported_platforms[build_num] if GOGlobal.supported_platforms[build_num] else build_num
+            if 'Product Version' in cells[0].text:
+                return cells[1].text.strip()
+    except Exception as e:
+        logger.exception(f"Error getting host version: {e}")
+        return ""
+    return ""
 
-# Step 3: Extract Platform Version
-def extract_platform_version(log_entries, soup):
-    platform_version = None
-    platform_build_number = None
-    
-    for entry in log_entries:
-        if "The current operating system is" in entry['Description']:
-            platform_version = entry['Description'].split("is")[1].strip()
-            break
-    
-    operating_env_section = soup.find('a', {'name': 'EnvOp'})
-    if operating_env_section:
-        env_table = operating_env_section.find_next('table')
-        env_rows = env_table.find_all('tr')
+def get_platform_version_from_logs(soup: BeautifulSoup):
+    try:
+        operating_env_section = soup.find('a', {'name': 'EnvOp'})
+        if operating_env_section:
+            env_table = operating_env_section.find_next('table')
+            env_rows = env_table.find_all('tr')
+            
+            for row in env_rows:
+                cells = row.find_all('td')
+                if len(cells) > 0 and 'Platform Build Number' in cells[0].text:
+                    build_num = cells[1].text.split(".")[0].strip()
+                    build_num_full = cells[1].text.strip()
+                    return GOGlobal.supported_platforms[build_num] if GOGlobal.supported_platforms[build_num] else build_num, build_num_full
+    except Exception as e:
+        logger.exception(f"Error getting platform version from logs: {e}")
+        return ""
+
+def get_platform_version_from_sysInfo(sysInfo_dir):
+    try:
+        sysInfo_path = os.path.join(sysInfo_dir, "SystemInformation.txt")
         
-        for row in env_rows:
-            cells = row.find_all('td')
-            if len(cells) > 0 and 'Platform Build Number' in cells[0].text:
-                platform_build_number = cells[1].text.strip()
-    
-    return platform_version, platform_build_number
+        with open(sysInfo_path) as file:
+            lines = file.readlines()
+            if len(lines) > 2:
+                return lines[2].split(":")[1].strip()
+            else:
+                logger.info(f"SystemInformation.txt is not of sufficient length to find a the Operating System.")
+                return ""
+    except Exception as e:
+        logger.exception(f"Error getting platform version from sysInfo: {e}")
+        return ""
 
 # Step 4: Extract Log Entries
 def extract_log_entries(fileName: str, soup):
     log_entries = []
     log_section = soup.find('a', {'name': 'LogEntries'})
-    log_table = log_section.find_next('table')
-    rows = log_table.find_all('tr')[1:]
+    if log_section:
+        log_table = log_section.find_next('table')
+        
+        if log_table:
+            rows = log_table.find_all('tr')[1:]
     
-    for row in rows:
-        cells = row.find_all('td')
-        if len(cells) != 0:
-            entry = {
-                '#': cells[0].text.strip(),
-                'date': cells[1].text.strip(),
-                'time': cells[2].text.strip(),
-                'description': cells[3].text.strip(),
-                'keys': [],
-                'file': fileName
-            }
-            log_entries.append(entry)
+            for row in rows:
+                cells = row.find_all('td')
+                if len(cells) != 0:
+                    description = cells[3].text.strip()
+                    user = server = process = pid = session = ''
+                    
+                    # Try to match full pattern first
+                    pattern = r'^(\S+) on (\S+)(?: \(\d+\))?, (\S+) \((\d+)\)'
+                    match = re.match(pattern, description)
+                    
+                    if match:
+                        user, server, process, pid = match.groups()
+                        description = description[match.end():].strip()
+                    else:
+                        # Fall back to just process and PID
+                        process_pid_pattern = r'^(\S+) \((\d+)\)'
+                        process_match = re.match(process_pid_pattern, description)
+                        if process_match:
+                            process, pid = process_match.groups()
+                            description = description[process_match.end():].strip()
+                    
+                    # Look for Session ID in the remaining description
+                    session_pattern = r'Session ID (\d+):'
+                    session_match = re.search(session_pattern, description)
+                    if session_match:
+                        session = session_match.group(1)
+                        # Remove the session info from description
+                        description = description.replace(session_match.group(0), '').strip()
+                    
+                    entry = {
+                        'Line': cells[0].text.strip(),
+                        'Date': cells[1].text.strip(),
+                        'Time': cells[2].text.strip(),
+                        'User': user,
+                        'Server': server,
+                        'Process': process,
+                        'PID': pid,
+                        'Session': session,
+                        'Description': description,
+                        'Keys': [],
+                        'File': fileName
+                    }
+                    log_entries.append(entry)
+        else:
+            logger.error(f"Warning: No log table found in {fileName}. This file may not contain log entries.")
+            return []
+    else: 
+        logger.error(f"Warning: No log section found in {fileName}. This file may not contain log entries.")
+        return []    
     
     return log_entries
 
@@ -183,8 +267,8 @@ def flag_log_entries(log_entries: list, keywords: list):
 
     for entry in log_entries:
         for keyword in keywords:
-            if keyword in entry['description']:
-                entry['keys'].append(keyword)
+            if keyword in entry['Description']:
+                entry['Keys'].append(keyword)
 
 
 # Step 6a: Generate Summary
@@ -197,7 +281,7 @@ def generate_summary(info, error_dict):
     
     if error_dict:
         for type, details in error_dict.items():
-            summary.append(f"{type}  - Entry {details['#']} on {details['date']} at {details['time']}: {details['description']}")
+            summary.append(f"{type}  - Entry {details['Line']} on {details['Date']} at {details['Time']}: {details['Description']}")
     else:
         summary.append("No errors or failures detected.")
     
@@ -223,7 +307,10 @@ def log_info(file_path, keywords=DEFAULT_KEYWORDS):
     for file in os.listdir(file_path):
         if file.endswith(".html"):
             soup = load_log_file(os.path.join(file_path, file))
-            log_entries += extract_log_entries(file, soup)
+            log_entries.extend(extract_log_entries(file, soup))
+
+        if file.endswith(".log") and file.startswith("aps"):
+            log_entries.extend(load_log_file_text(os.path.join(file_path, file), log_entries))
     
     flag_log_entries(log_entries, keywords)
     
@@ -287,7 +374,7 @@ def check_licenses(file_path):
         return validate_cloud_license(file_path)
     
     # If no .lic or .html files found
-    print("No .lic or .html files found in the zip archive.")
+    logger.error("No .lic or .html files found in the zip archive.")
 
 ### On-Prem Section ##################################################
 def validate_on_prem_licenses(directory):
@@ -326,7 +413,7 @@ def validate_on_prem_licenses(directory):
             else:
                 raise Exception(LookupError)
         except Exception as e:
-            print(f"Error processing license {license['product_code']}: {e}")
+            logger.exception(f"Error processing license {license['product_code']}: {e}")
         
     return licenses_found
 
@@ -351,7 +438,6 @@ def process_license_files(directory):
                 
                 product_code, serial_number, num_seats = parse_license_file(txt_path)
                 if product_code and serial_number:
-                    # response_body = myUtils.https_get(f"http://license.graphon.com/license/GraphOn/api_validate_maintenance?serial={serial_number}_PRODUCTCODE={product_code}")
                     response_body = check_license_validity(product_code, serial_number)
                     license_data.append({
                         'product_code': product_code,
@@ -361,15 +447,15 @@ def process_license_files(directory):
                         'response_body': response_body
                     })
                 elif serial_number:
-                    print(f"Cannot check license validity because no product code was found in {file_path}.")
-                    print(f"Serial Number: {serial_number}")
+                    logger.error(f"Cannot check license validity because no product code was found in {file_path}.")
+                    logger.error(f"Serial Number: {serial_number}")
                 elif product_code:
-                    print(f"Cannot check license validity because no serial number was found in {file_path}.")
-                    print(f"Product code: {product_code}")
+                    logger.error(f"Cannot check license validity because no serial number was found in {file_path}.")
+                    logger.error(f"Product code: {product_code}")
                 else:
-                    print(f"Cannot check license validity because no product code or serial number was found in {file_path}.")
+                    logger.error(f"Cannot check license validity because no product code or serial number was found in {file_path}.")
     except Exception as e:
-        print(f"Error processing files in directory {directory}: {e}")
+        logger.exception(f"Error processing files in directory {directory}: {e}")
     finally:
         return license_data
 
@@ -389,7 +475,7 @@ def copy_lic_to_txt(lic_file_path):
         myUtils.copy_file_contents(lic_file_path, txt_file_path)
         return txt_file_path
     except Exception as e:
-        print(f"Error copying {lic_file_path} to .txt: {e}")
+        logger.exception(f"Error copying {lic_file_path} to .txt: {e}")
         raise
 
 ## Helper - validate_on_prem_licenses
@@ -419,7 +505,7 @@ def parse_license_file(file_path):
                 if '# Seats' in line:
                     num_seats = line.split(':')[1].strip()
     except Exception as e:
-        print(f"Error parsing license file {file_path}: {e}")
+        logger.exception(f"Error parsing license file {file_path}: {e}")
 
     return product_code, serial_number, num_seats
 
@@ -439,7 +525,7 @@ def check_license_validity(product_code, serial_number):
         url = f"http://license.graphon.com/license/GraphOn/api_validate_maintenance?serial={serial_number}_PRODUCTCODE={product_code}"
         return requests.get(url)
     except requests.RequestException as e:
-        print(f"Error checking license validity for product code {product_code} and serial number {serial_number}: {e}")
+        logger.exception(f"Error checking license validity for product code {product_code} and serial number {serial_number}: {e}")
         return None
 ### On-Prem Section ##################################################
 
@@ -500,7 +586,7 @@ def validate_cloud_license(directory):
                         }
                         break
     except Exception as e:
-        #print(f"Error processing cloud license: {e}")
+        logger.exception(f"Error processing cloud license: {e}")
         licenses_found['Total'] = {
             'status': e,
             'seats': 0,
@@ -511,13 +597,68 @@ def validate_cloud_license(directory):
 ### Cloud Section ##################################################
 
 
+def get_basic_info(path: str):
+    info = {
+        'hostOS': "",
+        'platformBuild': "",
+        'hostVersion': "",
+        'serverRole': "",
+        'serverIp': ""
+    }
+    
+    try:
+        if os.path.exists(path) and os.path.isdir(path):
+            # Check for server role in registry file - look for any registry file matching the pattern
+            reg_files = [f for f in os.listdir(path) if f.startswith("HKLM.Software.") and f.endswith(".reg64.txt")]
+            for reg_file in reg_files:
+                reg_file_path = os.path.join(path, reg_file)
+                try:
+                    with open(reg_file_path, 'r', encoding='utf-16') as file:
+                        for line in file:
+                            if "ServerRole" in line:
+                                try:
+                                    info['serverRole'] = GOGlobal.server_roles[int(line.split(':')[1].strip())]
+                                    break
+                                except (ValueError, IndexError):
+                                    logger.exception("Error parsing ServerRole value")
+                    if info['serverRole']:  # If we found the server role, no need to check other files
+                        break
+                except Exception as e:
+                    logger.exception(f"Error reading registry file {reg_file}: {e}")
+
+            ipconfig_path = os.path.join(path, 'ipconfig.txt')
+            if os.path.exists(ipconfig_path):
+                try:
+                    with open(ipconfig_path, 'r') as file:
+                        for line in file:
+                            match = re.search(r'IPv4.*?:\s*([\d\.]+)', line) #IPv4 will be the same across any language (hopefully)
+                            if match:
+                                info['serverIp'] = match.group(1)
+                                break  # Stop reading after the first match
+                except (FileNotFoundError, PermissionError, OSError) as e:
+                    logger.exception(f"Failed to read {ipconfig_path}: {e}. Setting server IP to default value.")
+                    info['serverIp'] = "0.0.0.0"  # Default IP value if reading fails
+
+
+            # Get other info from HTML files
+            for file in os.listdir(path):
+                if file.endswith(".html"):
+                    soup = load_log_file(os.path.join(path, file))
+                    
+                    info['hostOS'], info['platformBuild'] = get_platform_version_from_logs(soup)
+                    if not info['hostOS']:
+                        info['hostOS'] = get_platform_version_from_sysInfo(path)
+                        info['platformBuild'] = "Not found"
+                    info['hostVersion'] = get_host_version(soup)
+                    break
+    except Exception as e:
+        logger.exception(f"Error getting basic info: {e}")
+    
+    return info
+
 
 # Main Function to Run the Analysis
-def main(file_path):
-    log_info(file_path)
-
-# Example Usage
-if __name__ == "__main__":
+def main():
     zip_file_path = myUtils.select_file("SRW", ".zip")
 
     temp_path = os.path.join(os.path.dirname(zip_file_path), "temp")
@@ -525,7 +666,11 @@ if __name__ == "__main__":
     log_entries = log_info(temp_path)
 
     for entry in log_entries:
-        if len(entry['keys']) > 0:
-            print(entry['description'])
+        if len(entry['Keys']) > 0:
+            logger.info(entry['Description'])
 
     myUtils.remove_directory(temp_path)
+
+# Example Usage
+if __name__ == "__main__":
+    main()
