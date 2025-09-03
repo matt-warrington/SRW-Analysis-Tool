@@ -41,12 +41,15 @@ class SRWAnalyzerApp(tk.Frame):
         #self._last_font_size = 11
         #self.root.bind("<Configure>", self.on_resize)
 
-        # Create a style for the hyperlink button
-        self.link_style = ttk.Style()
-        self.link_style.configure("Link.TButton", foreground="blue", borderwidth=0)
-        self.link_style.map("Link.TButton",
-                           foreground=[("hover", "purple")],
-                           relief=[("pressed", "flat"), ("!pressed", "flat")])
+        # Create a style for the UI and hyperlink button
+        self.style = ttk.Style()
+        self.style.theme_use("clam")
+        self.style.configure("Link.TButton", foreground="blue", borderwidth=0)
+        self.style.map(
+            "Link.TButton",
+            foreground=[("hover", "purple")],
+            relief=[("pressed", "flat"), ("!pressed", "flat")]
+        )
 
         
         '''
@@ -82,31 +85,32 @@ class SRWAnalyzerApp(tk.Frame):
         self.container = ttk.Frame(root)
         self.container.pack(fill="both", expand=True)
         
-        # Create main scrollable frame
-        self.main_canvas = tk.Canvas(self.container)
+        # Create main scrollable frame with vertical scrolling only
+        self.main_canvas = tk.Canvas(self.container, highlightthickness=0)
         self.scrollbar_y = ttk.Scrollbar(self.container, orient="vertical", command=self.main_canvas.yview)
-        self.scrollbar_x = ttk.Scrollbar(self.container, orient="horizontal", command=self.main_canvas.xview)
         self.scrollable_frame = ttk.Frame(self.main_canvas)
 
+        # Create window inside canvas and keep reference
+        self.canvas_frame = self.main_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        # Update scrollregion and frame width on resize
         self.scrollable_frame.bind(
             "<Configure>",
             lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
         )
-
-        self.main_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.main_canvas.configure(
-            yscrollcommand=self.scrollbar_y.set,
-            xscrollcommand=self.scrollbar_x.set
+        self.main_canvas.bind(
+            "<Configure>",
+            lambda e: self.main_canvas.itemconfig(self.canvas_frame, width=e.width)
         )
 
-        # Pack the scrollbars and canvas
+        self.main_canvas.configure(yscrollcommand=self.scrollbar_y.set)
+
+        # Pack the scrollbar and canvas
         self.scrollbar_y.pack(side="right", fill="y")
-        self.scrollbar_x.pack(side="bottom", fill="x")
         self.main_canvas.pack(side="left", fill="both", expand=True)
 
         # Bind mousewheel to root for global scrolling
         self.root.bind_all("<MouseWheel>", self._on_mousewheel)
-        self.root.bind_all("<Shift-MouseWheel>", self._on_shift_mousewheel)
         
         # Initialize scrolling widget tracker
         self.scrolling_widget = None
@@ -170,20 +174,9 @@ class SRWAnalyzerApp(tk.Frame):
             if isinstance(widget, ttk.Treeview):
                 return
             widget = widget.master
-            
+
         # If not in a treeview, scroll the main canvas
         self.main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-
-    def _on_shift_mousewheel(self, event):
-        # Check if the event originated from a treeview
-        widget = event.widget
-        while widget is not None:
-            if isinstance(widget, ttk.Treeview):
-                return
-            widget = widget.master
-            
-        # If not in a treeview, scroll the main canvas
-        self.main_canvas.xview_scroll(int(-1*(event.delta/120)), "units")
 
     def cleanup(self, event):
         # Delete the temporary directory if it exists
