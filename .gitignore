@@ -1,1 +1,6 @@
 *.pyc
+.qodo
+*.spec
+build
+dist
+*.log
