@@ -13,6 +13,7 @@ from ExpandedLogView import ExpandedLogDialog
 import GOGlobal
 import pandas as pd
 from ToolTip import ToolTip
+from ttkbootstrap import Style
 
 # Import functions from other files
 import myUtils
@@ -41,13 +42,12 @@ class SRWAnalyzerApp(tk.Frame):
         #self._last_font_size = 11
         #self.root.bind("<Configure>", self.on_resize)
 
-        # Create a style for the UI and hyperlink button
-        self.style = ttk.Style()
-        self.style.theme_use("clam")
-        self.style.configure("Link.TButton", foreground="blue", borderwidth=0)
+        # Create a modern style for the UI and hyperlink button
+        self.style = Style(master=self.root, theme="flatly")
+        self.style.configure("Link.TButton", foreground="#0d6efd", borderwidth=0)
         self.style.map(
             "Link.TButton",
-            foreground=[("hover", "purple")],
+            foreground=[("hover", "#6610f2")],
             relief=[("pressed", "flat"), ("!pressed", "flat")]
         )
 
