@@ -2,7 +2,13 @@ import GOGlobal
 import os
 from ApsLogs import load_log_file
 
+
 def get_basic_info(path: str):
+    """Gather host and client information from log files in ``path``.
+
+    Searches the given directory for HTML logs and extracts host OS, host
+    version, and client versions to build a summary dictionary.
+    """
     info = {
         'hostOS': None,
         'hostVersion': None,
@@ -21,7 +27,9 @@ def get_basic_info(path: str):
 
     return info
 
+
 def get_host_version(soup):
+    """Extract the product version string from a BeautifulSoup object."""
     # Extract Product Version
     product_info_table = soup.find_all('table')[1]
     rows = product_info_table.find_all('tr')
@@ -33,7 +41,9 @@ def get_host_version(soup):
     
     return ''
 
+
 def get_client_versions(log_entries):
+    """Parse client version entries from raw log dictionaries."""
     client_versions = []
 
     for entry in log_entries:
@@ -47,7 +57,9 @@ def get_client_versions(log_entries):
 
     return client_versions
 
+
 def get_client_versions(soup):
+    """Extract client version tuples from an HTML log file."""
     client_versions = []
 
     log_section = soup.find('a', {'name': 'LogEntries'})
@@ -67,7 +79,9 @@ def get_client_versions(soup):
 
     return client_versions
 
+
 def get_platform_version(log_entries):
+    """Read platform version from textual log entries."""
     platform_version = None
     platform_build_number = None
     
@@ -77,7 +91,9 @@ def get_platform_version(log_entries):
     
     return "Not found"
 
+
 def get_platform_version(soup):
+    """Convert platform build numbers from HTML logs to friendly names."""
     operating_env_section = soup.find('a', {'name': 'EnvOp'})
     if operating_env_section:
         env_table = operating_env_section.find_next('table')

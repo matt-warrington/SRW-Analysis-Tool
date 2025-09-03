@@ -2,7 +2,9 @@ import myUtils
 import zipfile
 from tkinter import simpledialog, messagebox
 
+
 def extract_error_codes(zip_file_path):
+    """Extract the ``ErrorCodes.txt`` file from a supplied ZIP archive."""
     with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
         # Extract only the ErrorCodes.txt file
         for file_info in zip_ref.infolist():
@@ -11,7 +13,9 @@ def extract_error_codes(zip_file_path):
                     return file.read().decode('utf-8')
     return None
 
+
 def parse_error_codes(content):
+    """Convert ``ErrorCodes.txt`` content into a dictionary of codes."""
     error_dict = {}
     lines = content.splitlines()
     for line in lines:
@@ -25,13 +29,17 @@ def parse_error_codes(content):
             error_dict[code] = description
     return error_dict
 
+
 def get_error_code_range(error_dict):
+    """Return the minimum and maximum error code present in ``error_dict``."""
     codes = list(error_dict.keys())
     if codes:
         return min(codes), max(codes)
     return None, None
 
+
 def error_code_lookup_2(zip_file_path):
+    """Simplified lookup returning a dict of error codes from a ZIP file."""
     content = extract_error_codes(zip_file_path)
     if not content:
         messagebox.showerror("Error", "ErrorCodes.txt not found in the selected zip file.")
@@ -39,7 +47,9 @@ def error_code_lookup_2(zip_file_path):
     
     return parse_error_codes(content)
 
+
 def error_code_lookup(zip_file_path):
+    """Interactive dialog-based lookup for GO-Global error codes."""
     content = extract_error_codes(zip_file_path)
     if not content:
         messagebox.showerror("Error", "ErrorCodes.txt not found in the selected zip file.")
@@ -66,10 +76,12 @@ def error_code_lookup(zip_file_path):
             else:
                 messagebox.showerror("Error", f"Error code {error_code} not found.")
         except ValueError:
-            messagebox.showerror("Error", "Invalid input! Please enter a valid integer error code.")
+                messagebox.showerror("Error", "Invalid input! Please enter a valid integer error code.")
+
 
 # Main function to be called from another script
 def main():
+    """CLI entry point for the error code lookup dialog."""
     zip_file_path = myUtils.select_file("ErrorCodeKit", ".zip")
     if zip_file_path:
         error_code_lookup(zip_file_path)

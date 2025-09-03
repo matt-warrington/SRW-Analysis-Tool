@@ -25,7 +25,9 @@ DEFAULT_KEYWORDS = [
 CONFIG_FILE_PATH = "config.json"
 DEFAULT_LOG_FILE = "app.log"
 
+
 def setup_logger():
+    """Configure a module-level logger from ``config.json`` settings."""
     try:
         # Load log file path from config.json
         if os.path.exists(CONFIG_FILE_PATH):
@@ -89,6 +91,7 @@ def load_keywords_from_config(config_path=CONFIG_FILE_PATH):
         return DEFAULT_KEYWORDS
 
 def load_log_file(file_path):
+    """Load an APS HTML log file and return a BeautifulSoup object."""
     try:
         with open(file_path, 'r', encoding='utf-16') as file:
             content = file.read()
@@ -100,9 +103,9 @@ def load_log_file(file_path):
             with open(file_path, 'rb') as file:
                 raw_data = file.read()
                 detected_encoding = chardet.detect(raw_data)['encoding']
-            
+
             logger.info(f"Detected encoding for {file_path}: {detected_encoding}")  # Debug statement
-            
+
             # Try opening the file with the detected encoding
             try:
                 with open(file_path, 'r', encoding=detected_encoding ) as file:
@@ -125,14 +128,15 @@ def load_log_file(file_path):
             raise RuntimeError(f"Error loading log file: {e}")
 
 def load_log_file_text(file_path, log_entries):
+    """Append lines from a text-based APS log file to ``log_entries``."""
     try:
         # Detect the encoding
         with open(file_path, 'rb') as file:
             raw_data = file.read()
             detected_encoding = chardet.detect(raw_data)['encoding']
-        
+
         logger.info(f"Detected encoding for {file_path}: {detected_encoding}")  # Debug statement
-        
+
         # Try opening the file with the detected encoding
         try:
             with open(file_path, 'r', encoding=detected_encoding) as file:
@@ -154,10 +158,11 @@ def load_log_file_text(file_path, log_entries):
         raise RuntimeError(f"Error loading log file: {e}")
 
 def get_host_version(soup):
+    """Extract the GO-Global host version from a parsed log file."""
     try:
         product_info_table = soup.find_all('table')[1]
         rows = product_info_table.find_all('tr')
-        
+
         for row in rows:
             cells = row.find_all('td')
             if 'Product Version' in cells[0].text:
@@ -168,12 +173,13 @@ def get_host_version(soup):
     return ""
 
 def get_platform_version_from_logs(soup: BeautifulSoup):
+    """Return platform OS name and build number from HTML logs."""
     try:
         operating_env_section = soup.find('a', {'name': 'EnvOp'})
         if operating_env_section:
             env_table = operating_env_section.find_next('table')
             env_rows = env_table.find_all('tr')
-            
+
             for row in env_rows:
                 cells = row.find_all('td')
                 if len(cells) > 0 and 'Platform Build Number' in cells[0].text:
@@ -185,9 +191,10 @@ def get_platform_version_from_logs(soup: BeautifulSoup):
         return ""
 
 def get_platform_version_from_sysInfo(sysInfo_dir):
+    """Fallback method to read platform version from a ``SystemInformation.txt``."""
     try:
         sysInfo_path = os.path.join(sysInfo_dir, "SystemInformation.txt")
-        
+
         with open(sysInfo_path) as file:
             lines = file.readlines()
             if len(lines) > 2:
@@ -201,24 +208,25 @@ def get_platform_version_from_sysInfo(sysInfo_dir):
 
 # Step 4: Extract Log Entries
 def extract_log_entries(fileName: str, soup):
+    """Parse individual log rows from an APS HTML file."""
     log_entries = []
     log_section = soup.find('a', {'name': 'LogEntries'})
     if log_section:
         log_table = log_section.find_next('table')
-        
+
         if log_table:
             rows = log_table.find_all('tr')[1:]
-    
+
             for row in rows:
                 cells = row.find_all('td')
                 if len(cells) != 0:
                     description = cells[3].text.strip()
                     user = server = process = pid = session = ''
-                    
+
                     # Try to match full pattern first
                     pattern = r'^(\S+) on (\S+)(?: \(\d+\))?, (\S+) \((\d+)\)'
                     match = re.match(pattern, description)
-                    
+
                     if match:
                         user, server, process, pid = match.groups()
                         description = description[match.end():].strip()
@@ -229,7 +237,7 @@ def extract_log_entries(fileName: str, soup):
                         if process_match:
                             process, pid = process_match.groups()
                             description = description[process_match.end():].strip()
-                    
+
                     # Look for Session ID in the remaining description
                     session_pattern = r'Session ID (\d+):'
                     session_match = re.search(session_pattern, description)
@@ -237,7 +245,7 @@ def extract_log_entries(fileName: str, soup):
                         session = session_match.group(1)
                         # Remove the session info from description
                         description = description.replace(session_match.group(0), '').strip()
-                    
+
                     entry = {
                         'Line': cells[0].text.strip(),
                         'Date': cells[1].text.strip(),
@@ -255,13 +263,14 @@ def extract_log_entries(fileName: str, soup):
         else:
             logger.error(f"Warning: No log table found in {fileName}. This file may not contain log entries.")
             return []
-    else: 
+    else:
         logger.error(f"Warning: No log section found in {fileName}. This file may not contain log entries.")
-        return []    
-    
+        return []
+
     return log_entries
 
 def flag_log_entries(log_entries: list, keywords: list):
+    """Mark log entries whose description contains any of ``keywords``."""
     flagged_entries = {}
     for keyword in keywords:
         flagged_entries[keyword] = []
@@ -274,22 +283,24 @@ def flag_log_entries(log_entries: list, keywords: list):
 
 # Step 6a: Generate Summary
 def generate_summary(info, error_dict):
+    """Create a human-readable summary string of analysis results."""
     summary = []
     summary.append(f"Host OS: {info['hostOS'] if info['hostOS'] else 'N/A'}")
     summary.append(f"Host Version: {info['hostVersion'] if info['hostVersion'] else 'N/A'}")
     summary.append(f"Client Versions: {info['clientVersions'] if info['clientVersions'] else 'N/A'}")
     summary.append("\nPotential Issues Detected:\n")
-    
+
     if error_dict:
         for type, details in error_dict.items():
             summary.append(f"{type}  - Entry {details['Line']} on {details['Date']} at {details['Time']}: {details['Description']}")
     else:
         summary.append("No errors or failures detected.")
-    
+
     return "\n".join(summary)
 
 # Step 6b: Generate an output
 def generate_output(info, error_dict):
+    """Return a structured dictionary summarizing analysis results."""
     return {
         "hostOS": info["hostOS"] if info["hostOS"] else 'N/A',
         "hostVersion": info["hostVersion"] if info["hostVersion"] else 'N/A',
@@ -301,24 +312,26 @@ def generate_output(info, error_dict):
 # Main Function to Run the Analysis
 
 def log_info(file_path, keywords=DEFAULT_KEYWORDS):
+    """Aggregate and flag log entries from a directory of APS logs."""
     log_entries = []
 
     keywords = load_keywords_from_config()
 
     for file in os.listdir(file_path):
-        #log = ApsLog(file_path) # I might want to switch to using an APSLog object but not ready yet... 
+        #log = ApsLog(file_path) # I might want to switch to using an APSLog object but not ready yet...
         if file.endswith(".html"):
             soup = load_log_file(os.path.join(file_path, file))
             log_entries.extend(extract_log_entries(file, soup))
 
         if file.endswith(".log") and file.startswith("aps"):
             log_entries.extend(load_log_file_text(os.path.join(file_path, file), log_entries))
-    
+
     flag_log_entries(log_entries, keywords)
-    
+
     return log_entries
 
 def extract_error_codes(zip_file_path):
+    """Extract ``ErrorCodes.txt`` content from a ZIP archive."""
     with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
         # Extract only the ErrorCodes.txt file
         for file_info in zip_ref.infolist():
@@ -327,7 +340,9 @@ def extract_error_codes(zip_file_path):
                     return file.read().decode('utf-8')
     return None
 
+
 def parse_error_codes(content):
+    """Parse raw error code text into a dictionary keyed by integer code."""
     error_dict = {}
     lines = content.splitlines()
     for line in lines:
@@ -341,40 +356,48 @@ def parse_error_codes(content):
             error_dict[code] = description
     return error_dict
 
+
 def get_error_code_range(error_dict):
+    """Return the smallest and largest codes available."""
     codes = list(error_dict.keys())
     if codes:
         return min(codes), max(codes)
     return None, None
 
+
 def error_code_lookup(zip_file_path):
+    """Load error codes from a ZIP file and return a dictionary mapping."""
     content = extract_error_codes(zip_file_path)
     if not content:
         messagebox.showerror("Error", "ErrorCodes.txt not found in the selected zip file.")
         return
-    
+
     return parse_error_codes(content)
 
+
 def get_error_code(code: str, codes: dict):
+    """Fetch the description for a specific error ``code`` from ``codes``."""
     if code in codes.keys():
         return codes[code]
     else:
         return f"Error code {code} not found."
 
+
 def check_licenses(file_path):
+    """Determine whether to validate on-prem or cloud licenses based on files."""
     # Get a list of all files in the zip archive
     file_list = os.listdir(file_path)
-    
+
     # Check if any files end with .lic
     lic_files = [file for file in file_list if file.endswith('.lic')]
     if lic_files:
         return validate_on_prem_licenses(file_path)
-    
+
     # If no .lic files found, search for .html files
     html_files = [file for file in file_list if file.endswith('.html')]
     if html_files:
         return validate_cloud_license(file_path)
-    
+
     # If no .lic or .html files found
     logger.error("No .lic or .html files found in the zip archive.")
 
@@ -534,9 +557,12 @@ def check_license_validity(product_code, serial_number):
 ### Cloud Section ##################################################
 ## Main
 def validate_cloud_license(directory):
-    '''
-    UNFINISHED - NEED THIS TO RETURN A DICTIONARY OF LICENSES SO WE CAN DISPLAY IT IN THE SAME WAY AS ON-PREM LICENSES
-    '''
+    """Validate license information from HTML files in ``directory``.
+
+    This function is a work in progress; it attempts to parse licensing
+    information from GO-Global HTML logs and return a dictionary similar to the
+    on-premise validator.
+    """
     licenses_found = {
         "Total": {
             'status': '-',
@@ -600,6 +626,7 @@ def validate_cloud_license(directory):
 
 
 def get_basic_info(path: str):
+    """Extract high-level host and network details from a diagnostics bundle."""
     info = {
         'hostOS': "",
         'platformBuild': "",
@@ -661,6 +688,7 @@ def get_basic_info(path: str):
 
 # Main Function to Run the Analysis
 def main():
+    """CLI entry point for running a full APS log analysis."""
     zip_file_path = myUtils.select_file("SRW", ".zip")
 
     temp_path = os.path.join(os.path.dirname(zip_file_path), "temp")

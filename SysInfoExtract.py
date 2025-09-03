@@ -1,11 +1,14 @@
 import re
 import myUtils
 
+
 def get_key_mapping(language='en'):
-    """
-    Returns a dictionary mapping localized keys to English ones
-    Args:
-        language (str): Language code ('en', 'ja', 'es', 'de', 'fr', etc.)
+    """Return mapping of localized sysinfo keys to English equivalents.
+
+    Parameters
+    ----------
+    language: str
+        Two-letter language code used to select the mapping dictionary.
     """
     mappings = {
         'ja': {
@@ -182,7 +185,14 @@ def get_key_mapping(language='en'):
     
     return mappings.get(language, {})
 
+
 def extract_sysinfo(text):
+    """Parse ``systeminfo`` command output into a structured dictionary.
+
+    The function auto-detects the language of the output, translates known keys
+    to English and handles multi-line entries such as network cards and
+    processors.
+    """
     # Detect language from system locale line
     language = 'en'  # default
     if 'ja;' in text:
