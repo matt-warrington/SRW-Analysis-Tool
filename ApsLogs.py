@@ -2,6 +2,7 @@ import logging
 from tkinter import messagebox
 import zipfile
 from bs4 import BeautifulSoup
+#from ApsLog import ApsLog
 import myUtils
 import os
 import GOGlobal
@@ -305,6 +306,7 @@ def log_info(file_path, keywords=DEFAULT_KEYWORDS):
     keywords = load_keywords_from_config()
 
     for file in os.listdir(file_path):
+        #log = ApsLog(file_path) # I might want to switch to using an APSLog object but not ready yet... 
         if file.endswith(".html"):
             soup = load_log_file(os.path.join(file_path, file))
             log_entries.extend(extract_log_entries(file, soup))

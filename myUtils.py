@@ -29,12 +29,16 @@ def https_get_txt(url: str):
         return None
     
 def print_nested_dict(dictionary, indent=0):
-    for key, value in dictionary.items():
-        if isinstance(value, dict):
-            print("  " * indent + f"{key}:")
-            print_nested_dict(value, indent + 1)
-        else:
-            print("  " * indent + f"{key}: {value}")
+    if isinstance(dictionary, dict):
+        for key, value in dictionary.items():
+            if isinstance(value, dict):
+                print("  " * indent + f"{key}:")
+                print_nested_dict(value, indent + 1)
+            else:
+                print("  " * indent + f"{key}: {value}")
+    else:
+        print("printed_nested_dict() was called on a non-dictionary object... just printing the object:")
+        print(dictionary)
 
 def select_file(fileType = "Any", fileTypeExt = "*.*", initialDir = "C:\\Test"):
     """

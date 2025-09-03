@@ -1,4 +1,16 @@
 # I think I could replace this with a JSON file one day that could be way more useful for gathering all the relevant info I need. This is just a first attempt at storing some info centrally...
+import requests
+
+def get_supported_versions():
+    url = "https://portal.graphon.com/register/index.php?op=getVersions"
+    response = requests.get(url)
+    response.raise_for_status()  # Raises an error for bad responses
+    data = response.json()
+
+    # Adjust the key below as needed based on the actual JSON structure
+    if 'versions' in data:
+        return data['versions']
+    return data
 
 versions = [
     "6.3.2.34154",

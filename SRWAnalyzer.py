@@ -528,6 +528,7 @@ class SRWAnalyzerApp(tk.Frame):
             
             return base_path
 
+    # Open the selected log in the default web browser at the specific line number
     def open_log_in_browser(self, event):
         # If the user double-clicks on the treeview without clicking a specific log, don't open the browser.
         if not self.log_info_tree.selection():
@@ -548,6 +549,7 @@ class SRWAnalyzerApp(tk.Frame):
         file_url = f"file://{file_path}#line_{log_number}" # for some reason, this doesn't work, but you can manually add the line. Figure this out at some point.
         webbrowser.open(file_url)
 
+    # Jump to the first instance of the selected client info appearing in the log_info_tree
     def jump_to_context_client(self, event):
         # If the user double-clicks on the treeview without clicking a specific log, don't do anything
         if not self.client_tree.selection():
@@ -565,6 +567,7 @@ class SRWAnalyzerApp(tk.Frame):
                 self.jump_to_context(rowID)
                 break
 
+    # Jump to and highlight the specified rowID in the log_info_tree
     def jump_to_context(self, rowID: int):
         if not rowID:
             return
@@ -784,6 +787,12 @@ class SRWAnalyzerApp(tk.Frame):
     def call_check_licenses(self):
         result = check_licenses(self.unzipped_file_path)
         
+        if not result:
+            logger.info(f"check_licenses({self.unzipped_file_path}) returned None.")
+            for item in self.licenses_tree.get_children():
+                self.licenses_tree.delete(item)
+            return
+
         # Clear existing data in licenses_tree
         for item in self.licenses_tree.get_children():
             self.licenses_tree.delete(item)
