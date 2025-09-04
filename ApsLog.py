@@ -34,10 +34,14 @@ class ApsLog:
                 # Detect the encoding
                 with open(self.file_path, 'rb') as file:
                     raw_data = file.read()
-                    detected_encoding = chardet.detect(raw_data)['encoding']
-                
+                    detected = chardet.detect(raw_data)
+                    detected_encoding = detected.get('encoding') if isinstance(detected, dict) else None
+
+                if not detected_encoding:
+                    detected_encoding = 'utf-8'
+
                 logger.info(f"Detected encoding for {self.file_path }: {detected_encoding}")  # Debug statement
-                
+
                 # Try opening the file with the detected encoding
                 log_entries = []
                 try:
@@ -141,10 +145,14 @@ class ApsLog:
                         # Detect the encoding
                         with open(self.file_path, 'rb') as file:
                             raw_data = file.read()
-                            detected_encoding = chardet.detect(raw_data)['encoding']
-                        
+                            detected = chardet.detect(raw_data)
+                            detected_encoding = detected.get('encoding') if isinstance(detected, dict) else None
+
+                        if not detected_encoding:
+                            detected_encoding = 'utf-8'
+
                         logger.info(f"Detected encoding for {self.file_path}: {detected_encoding}")  # Debug statement
-                        
+
                         # Try opening the file with the detected encoding
                         try:
                             with open(self.file_path, 'r', encoding=detected_encoding ) as file:
@@ -166,17 +174,20 @@ class ApsLog:
 
     def extract_log_entries(self, soup):
         log_entries = []
-        
+
+        if not soup:
+            return log_entries
+
         log_section = soup.find('a', {'name': 'LogEntries'})
         if log_section:
             log_table = log_section.find_next('table')
-            
+
             if log_table:
                 rows = log_table.find_all('tr')[1:]
-        
+
                 for row in rows:
                     cells = row.find_all('td')
-                    if len(cells) != 0:
+                    if len(cells) > 3:
                         description = cells[3].text.strip()
                         user = server = process = pid = session = ''
                         
