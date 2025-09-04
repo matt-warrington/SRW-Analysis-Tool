@@ -1,7 +1,15 @@
 # I think I could replace this with a JSON file one day that could be way more useful for gathering all the relevant info I need. This is just a first attempt at storing some info centrally...
 import requests
 
+
 def get_supported_versions():
+    """Retrieve GO-Global versions supported by the registration portal.
+
+    The function performs an HTTP GET request to the GO-Global registration
+    portal and returns the list of versions reported in the JSON response.  If
+    the expected ``versions`` key is missing, the entire decoded JSON object is
+    returned instead so callers can handle unexpected structures.
+    """
     url = "https://portal.graphon.com/register/index.php?op=getVersions"
     response = requests.get(url)
     response.raise_for_status()  # Raises an error for bad responses

@@ -10,6 +10,18 @@ import requests
 
 
 def https_get(url: str):
+    """Perform an HTTPS GET request and return a parsed dictionary.
+
+    Parameters
+    ----------
+    url: str
+        Destination URL to query.
+
+    Returns
+    -------
+    dict
+        JSON payload converted to a dictionary or an empty dict on failure.
+    """
     try:
         response_txt = requests.get(url)
         response_json = response_txt.json()
@@ -19,16 +31,37 @@ def https_get(url: str):
         print(f"There was an exception in GET request to {url}:")
         print(f"\tException: {e}")
         return {}
-    
+
 def https_get_txt(url: str):
+    """Fetch raw text content from an HTTPS endpoint.
+
+    Parameters
+    ----------
+    url: str
+        Destination URL to query.
+
+    Returns
+    -------
+    requests.Response | None
+        Response object on success, otherwise ``None`` when the request fails.
+    """
     try:
         return requests.get(url)
     except requests.RequestException as e:
         print(f"There was an exception in GET request to {url}:")
         print(f"\tException: {e}")
         return None
-    
+
 def print_nested_dict(dictionary, indent=0):
+    """Recursively print a dictionary with hierarchical indentation.
+
+    Parameters
+    ----------
+    dictionary: dict | Any
+        Object to be printed. Non-dictionary objects are printed directly.
+    indent: int
+        Current indentation level used for nested dictionaries.
+    """
     if isinstance(dictionary, dict):
         for key, value in dictionary.items():
             if isinstance(value, dict):
@@ -101,6 +134,12 @@ def select_zip_file():
     return file_path
 
 def extract_zip(path: str, toPath = "C:\\temp_zip_reader"):
+    """Unzip the contents of ``path`` into ``toPath``.
+
+    Creates ``toPath`` if it does not already exist and returns the extraction
+    directory. An empty string is returned if the directory could not be
+    created.
+    """
     # Extract all files to a temp folder so we can directly see the license file
     if not os.path.exists(toPath):
         os.mkdir(toPath)
@@ -133,6 +172,15 @@ def remove_directory(dir_path):
         raise RuntimeError(f"Failed to remove directory {dir_path}")
 
 def copy_file_contents(path, newPath):
+    """Copy text from ``path`` into ``newPath``.
+
+    Parameters
+    ----------
+    path: str
+        Source file to read.
+    newPath: str
+        Destination file to create.
+    """
     try:
         with open(path, 'r') as lic_file:
             contents = lic_file.read()
@@ -161,18 +209,23 @@ def convert_response_to_dict(response_txt):
         return {}
 
 def protect_network_path(func):
-        '''
-        The point of this is to prevent certain functions (e.g. unzip_files()) from running on network folders.
-        '''
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            # Would the check for "//" be enough to ensure we can't run an operation on a network path?
-            for arg in args:
-                if isinstance(arg, str) and arg.startswith("//"):
-                     raise PermissionError(f"Operation not allowed on protected path: {arg}")
+    """Decorator to block file operations on network paths.
 
-            return func(self, *args, **kwargs)
-        return wrapper
+    The wrapped function raises ``PermissionError`` if any positional argument
+    appears to be a UNC path (starts with ``//``). This helps guard against
+    accidental destructive operations on network shares.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # Would the check for "//" be enough to ensure we can't run an operation on a network path?
+        for arg in args:
+            if isinstance(arg, str) and arg.startswith("//"):
+                raise PermissionError(f"Operation not allowed on protected path: {arg}")
+
+        return func(self, *args, **kwargs)
+
+    return wrapper
 
 @protect_network_path
 def unzip_path(path):
@@ -202,7 +255,8 @@ def unzip_path(path):
     return True
 
 def main():
-    #Testing
+    """Simple test harness for interactive utilities."""
+    # Testing
     path = select_file()
     print(path)
     path = select_file("HTML", ".html")
