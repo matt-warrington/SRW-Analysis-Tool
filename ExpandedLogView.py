@@ -11,6 +11,8 @@ class ExpandedLogDialog:
         self.dialog = tk.Toplevel(parent.root)
         self.dialog.title("Expanded Log View")
         self.parent = parent
+        # Ensure we sync back to parent on close
+        self.dialog.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # Set the window to full screen
         try:
@@ -138,7 +140,36 @@ class ExpandedLogDialog:
         # Add this to your existing initialization
         self._search_after_id = None
         self._last_search = None
-        
+
+    def on_close(self):
+        """Sync dialog state back to parent and close the window."""
+        try:
+            # Capture the currently selected row values in the dialog (if any)
+            selected_values = None
+            selected = self.log_info_tree.selection()
+            if selected:
+                selected_values = self.log_info_tree.item(selected[0])['values']
+
+            # Update the parent's treeview from the shared DataFrame
+            # (Key toggles have already updated self.log_df which is shared with parent)
+            if hasattr(self.parent, 'update_log_treeview'):
+                self.parent.update_log_treeview(self.log_df)
+
+            # Restore selection/focus in the parent to match the dialog's selection
+            if selected_values:
+                for item in self.parent.log_info_tree.get_children():
+                    if self.parent.log_info_tree.item(item)['values'] == selected_values:
+                        if hasattr(self.parent, 'jump_to_context'):
+                            self.parent.jump_to_context(item)
+                        else:
+                            # Fallback: just select the item
+                            self.parent.log_info_tree.selection_set(item)
+                            self.parent.log_info_tree.see(item)
+                        break
+        finally:
+            # Close the dialog
+            self.dialog.destroy()
+
     def copy_treeview_data(self, source_df):
         # Clear existing items
         for item in self.log_info_tree.get_children():
