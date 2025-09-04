@@ -43,7 +43,7 @@ class SRWAnalyzerApp(tk.Frame):
         #self.root.bind("<Configure>", self.on_resize)
 
         # Create a modern style for the UI and hyperlink button
-        self.style = Style(master=self.root, theme="flatly")
+        self.style = Style(theme="flatly")
         self.style.configure("Link.TButton", foreground="#0d6efd", borderwidth=0)
         self.style.map(
             "Link.TButton",
