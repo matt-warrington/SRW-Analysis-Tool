@@ -10,19 +10,41 @@ import requests
 
 
 def https_get(url: str):
+    """Perform a HTTP GET request and return the JSON payload.
+
+    The original implementation simply returned ``requests``' response object
+    and expected callers to decode the JSON themselves.  By doing the error
+    checking and decoding here we provide a much safer and easier to use
+    helper.
+    """
+
     try:
-        response_txt = requests.get(url)
-        response_json = response_txt.json()
-        response_dict = convert_response_to_dict(response_json)
-        return response_dict
+        response = requests.get(url)
+        response.raise_for_status()  # make HTTP errors obvious to the caller
+        try:
+            return response.json()
+        except ValueError as e:
+            # Response wasn't valid JSON; log the issue and return an empty dict
+            print(f"Failed to decode JSON from {url}: {e}")
+            return {}
     except requests.RequestException as e:
         print(f"There was an exception in GET request to {url}:")
         print(f"\tException: {e}")
         return {}
-    
+
+
 def https_get_txt(url: str):
+    """Perform a HTTP GET request and return the plain text payload.
+
+    Returning only the ``Response`` object left the caller responsible for
+    checking status codes and extracting text.  Handling those concerns here
+    keeps network access in one place and avoids duplicated error handling.
+    """
+
     try:
-        return requests.get(url)
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.text
     except requests.RequestException as e:
         print(f"There was an exception in GET request to {url}:")
         print(f"\tException: {e}")
@@ -98,6 +120,10 @@ def select_zip_file():
         title="Select a ZIP file",
         filetypes=[("ZIP files", "*.zip")]
     )
+    # Ensure the hidden root window is properly destroyed to avoid
+    # orphaned Tk instances which can cause resource leaks in larger
+    # applications.
+    root.destroy()
     return file_path
 
 def extract_zip(path: str, toPath = "C:\\temp_zip_reader"):
@@ -143,20 +169,36 @@ def copy_file_contents(path, newPath):
             txt_file.write(f"Error copying license file {path} to {newPath}.")
 
 def convert_response_to_dict(response_txt):
-    """
-    Converts a JSON response string to a dictionary.
-    
+    """Convert HTTP response content into a dictionary.
+
+    ``https_get`` may already return a parsed dictionary, while other callers
+    might pass a raw string payload.  The previous implementation assumed a
+    string and attempted to ``json.loads`` it directly which would fail if a
+    dictionary was supplied.  This helper now gracefully handles both cases.
+
     Args:
-        response_txt (str): The response text from the HTTP request.
-    
+        response_txt (Union[str, dict]): The response body from an HTTP
+            request.  It can be either a JSON string or an already parsed
+            dictionary.
+
     Returns:
-        dict: The response text converted to a dictionary.
+        dict: The parsed response or an empty dictionary if parsing fails.
     """
+
+    # If the response is already a dictionary, make a shallow copy so callers
+    # can safely mutate the result without affecting the original object.
+    if isinstance(response_txt, dict):
+        return dict(response_txt)
+
     try:
-        response_txt = re.sub(r'(\w+):', r'"\1":', response_txt)  # Replace single quotes with double quotes to ensure the JSON format
+        response_txt = re.sub(
+            r'(\w+):', r'"\1":', response_txt
+        )  # Replace single quotes with double quotes to ensure valid JSON
         license_dict = json.loads(response_txt)  # Convert the string to a dictionary
         return license_dict
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, TypeError) as e:
+        # ``TypeError`` is caught in case a non-string, non-dict object is
+        # passed.  Logging the issue helps diagnose malformed responses.
         print(f"Error converting response to dict: {e}")
         return {}
 
@@ -166,10 +208,19 @@ def protect_network_path(func):
         '''
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            # Would the check for "//" be enough to ensure we can't run an operation on a network path?
+            # Network paths on Windows typically start with ``\\`` while on
+            # Unix-like systems remote paths may be expressed as ``//``.  The
+            # previous implementation only checked for ``//`` and therefore
+            # failed to protect Windows UNC paths.  By normalising the string
+            # and checking for both prefixes we reduce the chance of
+            # accidentally modifying remote locations.
             for arg in args:
-                if isinstance(arg, str) and arg.startswith("//"):
-                     raise PermissionError(f"Operation not allowed on protected path: {arg}")
+                if isinstance(arg, str):
+                    normalised = arg.replace("\\", "/")
+                    if normalised.startswith("//"):
+                        raise PermissionError(
+                            f"Operation not allowed on protected path: {arg}"
+                        )
 
             return func(self, *args, **kwargs)
         return wrapper
