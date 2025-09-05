@@ -106,7 +106,6 @@ class ApsLog:
                         'PID': pid,
                         'Session': session,
                         'Description':description,
-                        'Keys': [],
                         'File': self.file_name
                     }
                     log_entries_formatted.append(entry_formatted)
@@ -224,7 +223,6 @@ class ApsLog:
                             'PID': pid,
                             'Session': session,
                             'Description': description,
-                            'Keys': [],
                             'File': self.file_name
                         }
                         log_entries.append(entry)

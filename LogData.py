@@ -19,7 +19,6 @@ class LogData:
             "Process",
             "PID",
             "Session",
-            "Keys",
             "Description"
         ]
         # Initialize an empty DataFrame with the correct columns
@@ -150,10 +149,7 @@ class LogData:
                 for _, row in selected_logs.iterrows():
                     values = []
                     for col in self.log_columns:
-                        if col == 'Keys':
-                            values.append(' | '.join(row[col]))
-                        else:
-                            values.append(str(row[col]))
+                        values.append(str(row[col]))
                     f.write('\t'.join(values[1:]) + '\n')
                 
             messagebox.showinfo("Success", f"Selected logs saved successfully to {file_path}")
