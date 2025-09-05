@@ -1,5 +1,4 @@
 {
-  "log_level": 1,
-  "srw_base_path": "C:\\Users\\Matt\\Documents\\Support Cases",
-  "key_logs_path": "C:\\Key Logs"
+    "srw_base_path": "C:\\Users\\Administrator\\Documents\\Support Cases",
+    "key_logs_path": "C:\\Key Logs"
 }

@@ -447,7 +447,6 @@ class SRWAnalyzerApp(tk.Frame):
         self.expand_button.grid(row=2, column=0, padx=5, pady=5, sticky="e")
         ToolTip(self.expand_button, "Opens a larger window for viewing the log tree.\nWill open to the log currently in focus.\nSingle-click on a log to set the focus.\nLog in focus will be highlighted blue.")
 
-
         # Bind scrolling for log_info_tree
         self._bind_treeview_scrolling(
             self.log_info_tree,
@@ -494,7 +493,6 @@ class SRWAnalyzerApp(tk.Frame):
         myUtils.remove_directory(self.unzipped_file_path)
         self.unzipped_file_path = ""
 
-
     def set_widgets_to_defaults(self):
         self.select_all_var.set(False)
 
@@ -502,9 +500,7 @@ class SRWAnalyzerApp(tk.Frame):
         if not os.path.exists(CONFIG_FILE_PATH):
             # First run, set the default dump path
             new_base_path = myUtils.select_dir("Select a base path for finding SRWs...")
-            config = {"srw_base_path": new_base_path}
-            with open(CONFIG_FILE_PATH, 'w') as config_file:
-                json.dump(config, config_file)
+            self.update_config("srw_base_path", new_base_path, CONFIG_FILE_PATH)
             return new_base_path
         else:
             # Read the dump path from the config file
@@ -512,11 +508,11 @@ class SRWAnalyzerApp(tk.Frame):
                 config = json.load(config_file)
 
             base_path = config.get("srw_base_path", "")
+
+            # If the path doesn't exist, prompt the user to select a new one and update the config file
             if base_path == "" or not os.path.exists(base_path):
                 base_path = myUtils.select_dir("Select a base path for finding SRWs...")
-                config["srw_base_path"] = base_path
-                with open(CONFIG_FILE_PATH, 'w') as config_file:
-                    json.dump(config, config_file)
+                self.update_config("srw_base_path", base_path, CONFIG_FILE_PATH)
             
             return base_path
 
@@ -581,7 +577,10 @@ class SRWAnalyzerApp(tk.Frame):
         # Check if the file exists and open it in Notepad, if there is a file value.
         if license_file != "-":
             if os.path.exists(license_file):
-                subprocess.Popen(['C:\\Windows\\notepad.exe', license_file])
+                if os.path.exists('C:\\Windows\\notepad.exe'):
+                    subprocess.Popen(['C:\\Windows\\notepad.exe', license_file])
+                else:
+                    messagebox.showerror("Error", "Notepad not found on this system.")
             else:
                 messagebox.showerror("Error", f"License file {license_file} not found.")
 
@@ -605,7 +604,6 @@ class SRWAnalyzerApp(tk.Frame):
             style="TButton",  # Reset to default button style
             cursor=""  # Reset cursor to default
         )
-
 
     def clear_all_treeviews(self, parent_widget):
         """Recursively find and clear all Treeviews"""
@@ -763,7 +761,6 @@ class SRWAnalyzerApp(tk.Frame):
             for item in self.log_info_tree.get_children():
                 self.log_info_tree.delete(item)
             
-
     def insert_tree(self, tree, parent, item):
         if isinstance(item, dict):
             for key, value in item.items():
@@ -792,7 +789,6 @@ class SRWAnalyzerApp(tk.Frame):
         # Insert new data into licenses_tree
         for license_id in result.keys():
             self.licenses_tree.insert('', 'end', values=(license_id, result[license_id]['status'], result[license_id]['seats'], result[license_id]['file']))
-
 
     def sort_column(self, col, reverse):
         # Gather all data upfront with required fields
@@ -861,7 +857,7 @@ class SRWAnalyzerApp(tk.Frame):
 
     def row_matches(self, row, search_values):
         for col, search_value in search_values.items():
-            if not search_value:  # Skip empty search terms
+            if not search_value: # Skip empty search terms
                 continue
             
             search_value = search_value.lower()
@@ -945,7 +941,6 @@ class SRWAnalyzerApp(tk.Frame):
             
             self.jump_to_context(new_selected_rows[0])
 
-
     def save_selected_logs(self):
         """Modified to work with DataFrame"""
         if self.log_df.empty:
@@ -963,11 +958,22 @@ class SRWAnalyzerApp(tk.Frame):
             return
 
         # Create Key Logs directory if it doesn't exist
-        default_key_logs_dir = "C:\\Key Logs"
-        key_logs_dir = self.config.get('key_logs_path', default_key_logs_dir)
+        key_logs_dir = self.config.get('key_logs_path', "")
         if key_logs_dir == "":
-            key_logs_dir = default_key_logs_dir
-        os.makedirs(key_logs_dir, exist_ok=True)
+            key_logs_dir = myUtils.select_dir("Select a default directory to save Key Logs...")
+            self.update_config("key_logs_path", key_logs_dir)
+
+
+        if key_logs_dir == "":
+            messagebox.showerror("Error", "No directory selected to save Key Logs. \n\nPlease update your config.json to include a valid path for saving your key logs.")
+            key_logs_dir = os.path.expanduser("~")
+        else:
+            # Ensure the directory exists
+            try:
+                os.makedirs(key_logs_dir, exist_ok=True)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to create directory {key_logs_dir}: {str(e)}")
+                return
         
         # Ask user for save location
         file_path = filedialog.asksaveasfilename(
@@ -1019,7 +1025,7 @@ class SRWAnalyzerApp(tk.Frame):
         """Create a custom dialog for Issue Summary and Resolution"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Issue Details")
-        dialog.geometry("500x550")  # Made taller to accommodate new fields
+        dialog.geometry("450x575")  # Made taller to accommodate new fields
         dialog.resizable(True, True)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -1027,10 +1033,25 @@ class SRWAnalyzerApp(tk.Frame):
         # Center the dialog
         dialog.geometry("+%d+%d" % (
             self.root.winfo_rootx() + self.root.winfo_width()/2 - 250,
-            self.root.winfo_rooty() + self.root.winfo_height()/2 - 250))
+            self.root.winfo_rooty() + self.root.winfo_height()/2 - 350))
+
+        # Make a scrollable frame inside the dialog
+        canvas = tk.Canvas(dialog)
+        scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
         # Issue Type frame
-        issue_frame = ttk.Frame(dialog, padding="10")
+        issue_frame = ttk.Frame(scrollable_frame, padding="10")
         issue_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Label(issue_frame, text="Issue Type:").pack(side='left')
         
@@ -1045,10 +1066,9 @@ class SRWAnalyzerApp(tk.Frame):
         issue_dropdown.pack(side='left', padx=5)
         issue_dropdown.set("Select Issue Type")
 
-        
         # Issue Resolved checkbox
         resolved_var = tk.BooleanVar()
-        resolved_frame = ttk.Frame(dialog, padding="10")
+        resolved_frame = ttk.Frame(scrollable_frame, padding="10")
         resolved_frame.pack(fill=tk.X, padx=5)
         resolved_check = ttk.Checkbutton(
             resolved_frame, 
@@ -1057,24 +1077,23 @@ class SRWAnalyzerApp(tk.Frame):
             command=lambda: toggle_resolution_state(resolved_var.get())
         )
         resolved_check.pack(side='left')
-        
 
         # Summary frame
-        summary_frame = ttk.Frame(dialog, padding="10")
+        summary_frame = ttk.Frame(scrollable_frame, padding="10")
         summary_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Label(summary_frame, text="Issue Summary:").pack(anchor='w')
         summary_entry = ttk.Entry(summary_frame, width=50)
         summary_entry.pack(fill=tk.X, pady=5)
 
         # Explanation frame
-        explanation_frame = ttk.Frame(dialog, padding="10")
+        explanation_frame = ttk.Frame(scrollable_frame, padding="10")
         explanation_frame.pack(fill=tk.BOTH, expand=False, padx=5, pady=5)
         ttk.Label(explanation_frame, text="Explanation:").pack(anchor='w')
         explanation_text = tk.Text(explanation_frame, width=50, height=6)
         explanation_text.pack(fill=tk.BOTH, expand=True, pady=5)
 
         # Resolution frame
-        resolution_frame = ttk.Frame(dialog, padding="10")
+        resolution_frame = ttk.Frame(scrollable_frame, padding="10")
         resolution_frame.pack(fill=tk.BOTH, expand=False, padx=5, pady=5)
         ttk.Label(resolution_frame, text="Resolution:").pack(anchor='w')
         resolution_text = tk.Text(resolution_frame, width=50, height=6)
@@ -1117,7 +1136,7 @@ class SRWAnalyzerApp(tk.Frame):
             dialog.destroy()
 
         # Button frame
-        button_frame = ttk.Frame(dialog, padding="15")
+        button_frame = ttk.Frame(scrollable_frame, padding="15")
         button_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=5)
         ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.RIGHT, padx=5)
         ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.RIGHT)
@@ -1235,7 +1254,6 @@ class SRWAnalyzerApp(tk.Frame):
                 "srw_base_path": "",
                 "key_logs_path": "" 
             }
-        
             
         # Check and update other paths as needed
         if not config["srw_base_path"] or not os.path.exists(config["srw_base_path"]):
@@ -1247,12 +1265,25 @@ class SRWAnalyzerApp(tk.Frame):
             logger.info("Key logs path not found. User selecting directory...")
             config["key_logs_path"] = myUtils.select_dir("Select a directory in which to save key logs")
 
-        # Save updated config
+        for key in config:
+            self.update_config(key, config[key], config_path)    
+        
+        return config
+
+    def update_config(self, key, value, config_path = CONFIG_FILE_PATH):
+        """Update a specific key in the config file"""
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except FileNotFoundError:
+            config = {}
+
+        config[key] = value
+        
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=4)
-            
-        return config
         
+        return config
 
 # Main program
 if __name__ == "__main__":
