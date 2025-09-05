@@ -179,10 +179,7 @@ class ExpandedLogDialog:
         for _, row in source_df.iterrows():
             values = []
             for col in self.log_info_tree['columns']:
-                if col == 'Keys':
-                    values.append(' | '.join(row.get(col, [])))
-                else:
-                    values.append(str(row.get(col, '')))
+                values.append(str(row.get(col, '')))
             
             item = self.log_info_tree.insert('', 'end', values=values)
 
@@ -279,21 +276,12 @@ class ExpandedLogDialog:
                 mask = pd.Series(True, index=self.log_df.index)
                 
                 for col, search_value in search_values.items():
-                    if col == 'Keys':
-                        # Handle Keys column search
-                        search_terms = [term.strip() for term in search_value.split(',')]
-                        keys_str = self.log_df['Keys'].apply(lambda x: ' | '.join(x) if isinstance(x, list) else str(x)).str.lower()
-                        terms_mask = pd.Series(True, index=self.log_df.index)
-                        for term in search_terms:
-                            terms_mask &= keys_str.str.contains(term, na=False)
-                        mask &= terms_mask
-                    else:
-                        # Handle other columns
-                        col_mask = self.log_df[col].astype(str).str.lower().str.contains(
-                            search_value, 
-                            na=False
-                        )
-                        mask &= col_mask
+                    # Handle all columns uniformly
+                    col_mask = self.log_df[col].astype(str).str.lower().str.contains(
+                        search_value,
+                        na=False
+                    )
+                    mask &= col_mask
                 
                 filtered_df = self.log_df[mask]
             
@@ -406,15 +394,7 @@ class ExpandedLogDialog:
         for _, row in df.iterrows():
             values = []
             for col in self.log_columns:
-                if col == 'Keys':
-                    # Handle Keys column which might be a list
-                    keys = row.get(col, [])
-                    if isinstance(keys, list):
-                        values.append(' | '.join(keys))
-                    else:
-                        values.append(str(keys))
-                else:
-                    values.append(str(row.get(col, '')))
+                values.append(str(row.get(col, '')))
             
             self.log_info_tree.insert('', 'end', values=values)
     '''
@@ -432,15 +412,7 @@ class ExpandedLogDialog:
         for index, row in df.iterrows():  # Keep index for tracking
             values = []
             for col in self.parent.log_columns:
-                if col == 'Keys':
-                    # Handle Keys column which might be a list
-                    keys = row.get(col, [])
-                    if isinstance(keys, list):
-                        values.append(' | '.join(keys))
-                    else:
-                        values.append(str(keys))
-                else:
-                    values.append(str(row.get(col, '')))
+                values.append(str(row.get(col, '')))
 
             # Insert row into Treeview, using the original DataFrame index as the iid
             self.log_info_tree.insert('', 'end', iid=str(index), text=str(index), values=values)

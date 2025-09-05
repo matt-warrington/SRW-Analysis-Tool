@@ -479,7 +479,6 @@ class SRWAnalyzerApp(tk.Frame):
             "Process": 100,
             "PID": 60,
             "Session": 80,
-            "Keys": 150,
             "Description": 700
         }
         
@@ -929,15 +928,7 @@ class SRWAnalyzerApp(tk.Frame):
         for index, row in df.iterrows():  # Keep index for tracking
             values = []
             for col in self.log_columns:
-                if col == 'Keys':
-                    # Handle Keys column which might be a list
-                    keys = row.get(col, [])
-                    if isinstance(keys, list):
-                        values.append(' | '.join(keys))
-                    else:
-                        values.append(str(keys))
-                else:
-                    values.append(str(row.get(col, '')))
+                values.append(str(row.get(col, '')))
 
             # Insert row into Treeview, using the original DataFrame index as the iid
             self.log_info_tree.insert('', 'end', iid=str(index), text=str(index), values=values)
@@ -1023,10 +1014,7 @@ class SRWAnalyzerApp(tk.Frame):
                 for _, row in selected_logs.iterrows():
                     values = []
                     for col in self.log_columns:
-                        if col == 'Keys':
-                            values.append(' | '.join(row[col]))
-                        else:
-                            values.append(str(row[col]))
+                        values.append(str(row[col]))
                     f.write('\t'.join(values[1:]) + '\n')
                 
             messagebox.showinfo("Success", f"Selected logs saved successfully to {file_path}")
@@ -1201,21 +1189,12 @@ class SRWAnalyzerApp(tk.Frame):
                 mask = pd.Series(True, index=self.log_df.index)
                 
                 for col, search_value in search_values.items():
-                    if col == 'Keys':
-                        # Handle Keys column search
-                        search_terms = [term.strip() for term in search_value.split(',')]
-                        keys_str = self.log_df['Keys'].apply(lambda x: ' | '.join(x) if isinstance(x, list) else str(x)).str.lower()
-                        terms_mask = pd.Series(True, index=self.log_df.index)
-                        for term in search_terms:
-                            terms_mask &= keys_str.str.contains(term, na=False)
-                        mask &= terms_mask
-                    else:
-                        # Handle other columns
-                        col_mask = self.log_df[col].astype(str).str.lower().str.contains(
-                            search_value, 
-                            na=False
-                        )
-                        mask &= col_mask
+                    # Handle all columns uniformly
+                    col_mask = self.log_df[col].astype(str).str.lower().str.contains(
+                        search_value,
+                        na=False
+                    )
+                    mask &= col_mask
                 
                 filtered_df = self.log_df[mask]
             

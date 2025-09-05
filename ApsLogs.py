@@ -11,17 +11,6 @@ from datetime import datetime as dt
 import json
 import re
 import chardet
-
-
-DEFAULT_KEYWORDS = [
-    "error",
-    "werfault.exe",
-    "failed",
-    "disconnected",
-    "memory usage limit",
-    "(WLE",
-    "(WSE",
-]
 CONFIG_FILE_PATH = "config.json"
 DEFAULT_LOG_FILE = "app.log"
 
@@ -49,44 +38,6 @@ def setup_logger():
 # Initialize the logger
 logger = setup_logger()
 
-# Note: Order should not matter since multiple keywords can be assigned to one message, but if we ever change that, the order will matter.
-def load_keywords_from_config(config_path=CONFIG_FILE_PATH):
-    """
-    Load keywords from a configuration file.
-
-    Args:
-        config_path (str): The path to the configuration file.
-
-    Returns:
-        list: A list of keywords loaded from the configuration file. If an error occurs during loading, an empty list is returned.
-    """
-    try:
-        if not os.path.exists(config_path):
-            config = {'log_keywords': DEFAULT_KEYWORDS}
-            with open(config_path, 'w') as config_file:
-                json.dump(config, config_file, indent=4)  # indent for readability
-            return DEFAULT_KEYWORDS
-        
-        with open(config_path, 'r') as config_file:
-            config = json.load(config_file)
-            log_keywords = config.get("log_keywords", [])
-            
-            # Check if log_keywords is empty or not present
-            if not log_keywords or len(log_keywords) == 0:
-                logger.warning(f"'log_keywords' is empty or not present in '{config_path}'. Using defaults.")
-                return DEFAULT_KEYWORDS
-            
-            return log_keywords
-    
-    except FileNotFoundError:
-        logger.error(f"Config file not found: {config_path}")
-        return DEFAULT_KEYWORDS
-    except PermissionError:
-        logger.error(f"Permission denied for file: {config_path}")
-        return DEFAULT_KEYWORDS
-    except Exception as e:
-        logger.exception(f"Error loading config file '{config_path}': {e}")
-        return DEFAULT_KEYWORDS
 
 def load_log_file(file_path):
     try:
@@ -248,7 +199,6 @@ def extract_log_entries(fileName: str, soup):
                         'PID': pid,
                         'Session': session,
                         'Description': description,
-                        'Keys': [],
                         'File': fileName
                     }
                     log_entries.append(entry)
@@ -260,17 +210,6 @@ def extract_log_entries(fileName: str, soup):
         return []    
     
     return log_entries
-
-def flag_log_entries(log_entries: list, keywords: list):
-    flagged_entries = {}
-    for keyword in keywords:
-        flagged_entries[keyword] = []
-
-    for entry in log_entries:
-        for keyword in keywords:
-            if keyword in entry['Description']:
-                entry['Keys'].append(keyword)
-
 
 # Step 6a: Generate Summary
 def generate_summary(info, error_dict):
@@ -300,22 +239,18 @@ def generate_output(info, error_dict):
 
 # Main Function to Run the Analysis
 
-def log_info(file_path, keywords=DEFAULT_KEYWORDS):
+def log_info(file_path):
     log_entries = []
 
-    keywords = load_keywords_from_config()
-
     for file in os.listdir(file_path):
-        #log = ApsLog(file_path) # I might want to switch to using an APSLog object but not ready yet... 
+        #log = ApsLog(file_path) # I might want to switch to using an APSLog object but not ready yet...
         if file.endswith(".html"):
             soup = load_log_file(os.path.join(file_path, file))
             log_entries.extend(extract_log_entries(file, soup))
 
         if file.endswith(".log") and file.startswith("aps"):
             log_entries.extend(load_log_file_text(os.path.join(file_path, file), log_entries))
-    
-    flag_log_entries(log_entries, keywords)
-    
+
     return log_entries
 
 def extract_error_codes(zip_file_path):
@@ -666,10 +601,6 @@ def main():
     temp_path = os.path.join(os.path.dirname(zip_file_path), "temp")
     myUtils.extract_zip(zip_file_path, temp_path)
     log_entries = log_info(temp_path)
-
-    for entry in log_entries:
-        if len(entry['Keys']) > 0:
-            logger.info(entry['Description'])
 
     myUtils.remove_directory(temp_path)
 
