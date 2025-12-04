@@ -141,22 +141,47 @@ def extract_zip(path: str, toPath = "C:\\temp_zip_reader"):
 # This one may be dangerous... it could be used on something it shouldn't... 
 # can I limit this somehow to make sure it only works if the directory has been created during the execution of a project, or even just in the last X minutes?
 def remove_directory(dir_path):
-    """Recursively delete a directory and all its contents."""
+    """Recursively delete a directory and all its contents with safeguards.
+
+    The previous implementation relied on a broad ``except`` block that masked
+    the original error and could happily attempt to remove sensitive locations
+    such as the working directory if called with an empty string.  This version
+    exits early for empty or missing paths, refuses to delete a small set of
+    critical directories, and raises exceptions that preserve the original
+    error context for easier debugging.
+    """
+
+    if not dir_path:
+        return
+
+    dir_path = os.path.abspath(dir_path)
+
+    # Prevent accidental deletion of critical locations
+    protected_paths = {
+        os.path.abspath(os.sep),              # root
+        os.path.expanduser("~"),             # user home
+        os.path.abspath(os.getcwd()),         # current working directory
+    }
+    if dir_path in protected_paths:
+        raise ValueError(f"Refusing to remove protected directory: {dir_path}")
+
+    if not os.path.exists(dir_path):
+        return
+
     try:
-        if dir_path and os.path.exists(dir_path):
-            # Iterate over all the entries in the directory
-            for entry in os.listdir(dir_path):
-                entry_path = os.path.join(dir_path, entry)
-                # Check if it is a directory and recurse
-                if os.path.isdir(entry_path):
-                    remove_directory(entry_path)
-                else:
-                    # Remove the file
-                    os.remove(entry_path)
-            # Remove the now-empty directory
-            os.rmdir(dir_path)
-    except:
-        raise RuntimeError(f"Failed to remove directory {dir_path}")
+        with os.scandir(dir_path) as entries:
+            for entry in entries:
+                entry_path = entry.path
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        remove_directory(entry_path)
+                    else:
+                        os.remove(entry_path)
+                except OSError as exc:
+                    raise RuntimeError(f"Failed to remove {entry_path}: {exc}") from exc
+        os.rmdir(dir_path)
+    except OSError as exc:
+        raise RuntimeError(f"Failed to remove directory {dir_path}: {exc}") from exc
 
 def copy_file_contents(path, newPath):
     try:
