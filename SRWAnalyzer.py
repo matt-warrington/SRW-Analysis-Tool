@@ -25,13 +25,20 @@ CONFIG_FILE_PATH = "config.json"
 #########################################################################
 
 class SRWAnalyzerApp(tk.Frame):
+    """Tkinter-based UI for inspecting SRW bundles.
+
+    The class bundles together window setup, widget creation, and event
+    handlers so new contributors can trace the user workflow from one place.
+    The constructor wires the layout and loads configuration so the
+    application is immediately usable when instantiated.
+    """
     def __init__(self, root):
         super().__init__(root)
         self.root = root
 
         # Load configuration
         self.config = self.load_config()
-        self.root.title("SRW Analyzer") 
+        self.root.title("SRW Analyzer")
         
         # Base font
         #self.base_font = tkfont.Font(family="Segoe UI", size=11)
@@ -111,7 +118,7 @@ class SRWAnalyzerApp(tk.Frame):
 
         # Bind mousewheel to root for global scrolling
         self.root.bind_all("<MouseWheel>", self._on_mousewheel)
-        
+
         # Initialize scrolling widget tracker
         self.scrolling_widget = None
 
@@ -179,10 +186,15 @@ class SRWAnalyzerApp(tk.Frame):
         self.main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def cleanup(self, event):
-        # Delete the temporary directory if it exists
+        # Delete the temporary directory if it exists.  This ensures the
+        # application leaves no residue after a session and makes repeated
+        # runs deterministic.
         myUtils.remove_directory(self.unzipped_file_path)
 
     def drop(self, event):
+        # Drag-and-drop handler for APS HTML logs.  The event payload can
+        # contain multiple paths separated by spaces, so we iterate over each
+        # entry after stripping Tkinter's brace-wrapped file notation.
         files = event.data.strip().split()  # Handle multiple files if dropped
 
         for file in files:

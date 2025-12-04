@@ -15,6 +15,12 @@ CONFIG_FILE_PATH = "config.json"
 DEFAULT_LOG_FILE = "app.log"
 
 def setup_logger():
+    """Create a configured logger based on ``config.json``.
+
+    The helper keeps logging configuration in one place so the rest of the
+    module can focus on parsing log content.  If the configuration file is not
+    present we fall back to a sensible default log destination.
+    """
     try:
         # Load log file path from config.json
         if os.path.exists(CONFIG_FILE_PATH):
@@ -40,6 +46,12 @@ logger = setup_logger()
 
 
 def load_log_file(file_path):
+    """Parse an APS HTML log file into a BeautifulSoup object.
+
+    The function prefers UTF-16 because that is how the logs are usually
+    produced.  If decoding fails we detect the encoding and retry so that the
+    caller always receives parsed HTML or a clear exception.
+    """
     try:
         with open(file_path, 'r', encoding='utf-16') as file:
             content = file.read()
@@ -76,6 +88,13 @@ def load_log_file(file_path):
             raise RuntimeError(f"Error loading log file: {e}")
 
 def load_log_file_text(file_path, log_entries):
+    """Load a plain-text APS log into a provided list buffer.
+
+    We sniff the encoding first to avoid UnicodeDecodeError when operators
+    manually adjust SRW bundles.  Lines are appended to the provided
+    ``log_entries`` list to keep allocation predictable when processing many
+    files in succession.
+    """
     try:
         # Detect the encoding
         with open(file_path, 'rb') as file:
@@ -105,6 +124,7 @@ def load_log_file_text(file_path, log_entries):
         raise RuntimeError(f"Error loading log file: {e}")
 
 def get_host_version(soup):
+    """Extract the GO-Global host version from the HTML log tables."""
     try:
         product_info_table = soup.find_all('table')[1]
         rows = product_info_table.find_all('tr')
@@ -119,6 +139,7 @@ def get_host_version(soup):
     return ""
 
 def get_platform_version_from_logs(soup: BeautifulSoup):
+    """Look for platform build information embedded in the APS HTML output."""
     try:
         operating_env_section = soup.find('a', {'name': 'EnvOp'})
         if operating_env_section:
@@ -136,6 +157,7 @@ def get_platform_version_from_logs(soup: BeautifulSoup):
         return ""
 
 def get_platform_version_from_sysInfo(sysInfo_dir):
+    """Read the platform version from the generated SystemInformation.txt file."""
     try:
         sysInfo_path = os.path.join(sysInfo_dir, "SystemInformation.txt")
         
